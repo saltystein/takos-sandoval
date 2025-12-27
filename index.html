@@ -1,0 +1,2196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TakOS">
+
+    <title>TakOS Sandoval</title>
+
+    <link rel="apple-touch-icon" href="https://saltystein.github.io/takos-sandoval/apple-icon.png">
+
+    <link rel="icon" type="image/png" href="https://saltystein.github.io/takos-sandoval/favicon.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Snapshot Paper Style */
+        .snapshot-sheet {
+            width: 100%;
+            max-width: 148mm; /* A5 Width */
+            min-height: 210mm; /* A5 Height */
+            background: white;
+            padding: 8mm;
+            margin: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* Deep shadow */
+            position: relative;
+            font-family: 'Roboto', sans-serif;
+            color: #1a202c;
+            border-radius: 4px;
+        }
+
+        /* Hide scrollbar for cleaner screenshot */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Ensure Modal is always on top */
+        #custom-modal { z-index: 100 !important; }
+        
+        /* Toast Animation */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-enter { animation: slideInRight 0.3s ease-out forwards; }
+        
+        /* Custom Tailwind Configuration */
+        :root {
+            --color-primary: #E53E3E; /* Red theme color */
+            --font-title: 'Montserrat', sans-serif;
+            --font-body: 'Roboto', sans-serif;
+        }
+
+        h1, h2, h3, .font-title { font-family: var(--font-title); }
+        body, p, span, div:not(.font-title) { font-family: var(--font-body); }
+
+        /* --- Custom Styles for POS Terminal --- */
+        .rocker-button { transition: all 0.1s; line-height: 1; }
+        .rocker-button:active { transform: scale(0.95); box-shadow: none; }
+        
+        /* --- Sidebar Transition Logic --- */
+        #sidebar {
+            transition: transform 0.3s ease-in-out;
+            z-index: 40; 
+            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1); 
+        }
+        #main-content-container {
+            transition: opacity 0.3s ease-in-out;
+            width: 100%;
+        }
+        #sidebar-toggle {
+            left: 0; 
+            transform: translateX(0); 
+            transition: transform 0.3s ease-in-out;
+        }
+        .sidebar-is-open #sidebar { transform: translateX(0); }
+        .sidebar-is-open #sidebar-toggle { transform: translateX(256px); }
+        
+        @media (min-width: 768px) {
+            #main-content-container { margin-left: 0; }
+            .sidebar-is-open #main-content-container { margin-left: 0; }
+            #sidebar-overlay { display: none !important; }
+        }
+
+        .order-card { transition: all 0.3s ease; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#E53E3E',
+                        'brand-dark': '#1A202C',
+                        'brand-light': '#F7FAFC',
+                        'expense': '#38A169',
+                        'inventory': '#805AD5',
+                        'attendance': '#3182CE',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased overflow-x-hidden">
+
+    <div id="login-screen" class="fixed inset-0 z-[60] bg-gray-900 flex flex-col items-center justify-center transition-opacity duration-300">
+        <div class="bg-white p-8 md:p-10 rounded-3xl shadow-2xl w-full max-w-sm transform transition-all scale-100" id="login-box">
+            
+            <div class="text-center mb-10">
+                <h1 class="text-6xl font-title font-bold text-gray-800 tracking-tighter leading-none mb-2">Tak<span class="text-primary">OS</span></h1>
+                <p class="text-sm font-bold tracking-[0.3em] text-gray-500 uppercase">Taratako Sandoval</p>
+            </div>
+            
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">Username</label>
+                    <div class="relative flex items-center">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i data-lucide="user" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        <input type="text" id="login-username" required class="block w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all font-medium text-gray-800 placeholder-gray-400" placeholder="Enter ID">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">Password</label>
+                    <div class="relative flex items-center">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i data-lucide="lock" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        <input type="password" id="login-password" required class="block w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all font-medium text-gray-800 placeholder-gray-400" placeholder="••••••••">
+                    </div>
+                </div>
+
+                <div id="login-error" class="hidden text-center text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-100 font-bold animate-pulse">
+                    Invalid credentials
+                </div>
+
+                <button type="submit" id="btn-login-submit" class="w-full bg-primary hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center text-lg tracking-wide">
+                    LOG IN
+                </button>
+            </form>
+            
+            <div class="mt-10 flex items-center justify-center text-gray-400 gap-2 opacity-70">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                <p class="text-[10px] font-bold uppercase tracking-[0.2em]">Authorized Personnel Login</p>
+            </div>
+        </div>
+        
+        <div id="session-loader" class="hidden flex-col items-center">
+            <div class="w-16 h-16 border-4 border-white/20 border-t-primary rounded-full animate-spin mb-6"></div>
+            <p class="text-white font-bold text-lg tracking-widest animate-pulse">VERIFYING ACCESS...</p>
+        </div>
+    </div>
+    
+    <div id="global-header" class="fixed top-0 left-0 w-full h-8 bg-gray-900 text-white flex items-center justify-between px-4 z-50 text-sm font-title shadow-md">
+        <div class="w-32 hidden md:block"></div> <span class="font-bold tracking-widest text-center flex-grow md:flex-grow-0">TARATAKO SANDOVAL</span>
+        <span id="header-date-display" class="w-32 text-right text-xs font-mono text-gray-400 font-normal"></span>
+    </div>
+
+    <button id="sidebar-toggle" class="fixed top-12 z-50 p-2 bg-gray-800 text-white rounded-r-lg shadow-xl hover:bg-primary transition duration-300 ease-in-out flex items-center justify-center">
+        <i id="toggle-icon" data-lucide="chevron-right" class="w-6 h-6 transition-transform duration-300"></i>
+    </button>
+
+    <div class="flex h-screen pt-8">
+
+        <div id="sidebar" class="fixed top-8 left-0 h-[calc(100%-2rem)] w-64 bg-brand-dark text-white z-30 transform -translate-x-full shadow-xl flex flex-col rounded-r-xl">
+            <div class="p-6 flex items-center justify-center border-b border-gray-700 bg-gray-900">
+                <div class="text-3xl font-bold font-title text-white">
+                    <span class="text-primary">Tak</span>OS
+                </div>
+            </div>
+
+            <nav class="flex-grow p-4 space-y-2 overflow-y-auto">
+                <a href="#" data-module="dashboard" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 bg-primary shadow-lg text-white">
+                    <i data-lucide="layout-grid" class="w-5 h-5 mr-3"></i> Dashboard
+                </a>
+                <a href="#" data-module="pos" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 text-gray-300">
+                    <i data-lucide="monitor-dot" class="w-5 h-5 mr-3"></i> POS
+                </a>
+                <a href="#" data-module="expenses" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 text-gray-300">
+                    <i data-lucide="dollar-sign" class="w-5 h-5 mr-3"></i> Expenses
+                </a>
+                <a href="#" data-module="inventory" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 text-gray-300">
+                    <i data-lucide="package" class="w-5 h-5 mr-3"></i> Inventory
+                </a>
+                <a href="#" data-module="attendance" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 text-gray-300">
+                    <i data-lucide="user-check" class="w-5 h-5 mr-3"></i> Attendance
+                </a>
+                <a href="#" data-module="reports" class="nav-link flex items-center p-3 text-lg font-medium rounded-lg hover:bg-gray-700 transition duration-150 text-gray-300">
+                    <i data-lucide="bar-chart-3" class="w-5 h-5 mr-3"></i> Report
+                </a>
+            </nav>
+
+            <div class="p-4 border-t border-gray-700 bg-gray-900">
+                <div class="flex items-center justify-between p-2 rounded-lg bg-gray-800 border border-gray-700">
+                    <div class="flex items-center overflow-hidden">
+                        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs mr-3" id="user-avatar">U</div>
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-white uppercase truncate max-w-[90px]" id="sidebar-username">User</span>
+                            <span class="text-[10px] text-green-400 font-medium">● Active</span>
+                        </div>
+                    </div>
+                    <button onclick="handleLogout()" class="p-2 text-gray-400 hover:text-white hover:bg-red-600 rounded-md transition-colors" title="Log Out">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="main-content-container" class="flex-1 min-h-full flex flex-col">
+            <header class="sticky top-0 z-20 bg-white shadow-md p-4 flex items-center justify-between">
+                <h1 id="page-title" class="text-xl md:text-2xl font-bold font-title text-gray-900 flex-grow text-left ml-12">Dashboard</h1>
+                
+                <div class="relative mr-2">
+                    <button id="notif-btn" class="p-2 rounded-full hover:bg-gray-100 transition-colors relative outline-none focus:bg-gray-100" onclick="toggleNotifDropdown()">
+                        <i data-lucide="bell" class="w-6 h-6 text-gray-600"></i>
+                        <span id="notif-badge" class="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white hidden animate-bounce"></span>
+                    </button>
+                    
+                    <div id="notif-dropdown" class="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 hidden transform origin-top-right transition-all z-50">
+                        <div class="p-3 border-b border-gray-100 font-bold text-gray-700 text-xs uppercase flex justify-between items-center bg-gray-50 rounded-t-xl">
+                            <span>Recent Activity</span>
+                            <button onclick="clearNotifications()" class="text-xs text-blue-500 hover:text-blue-700 font-semibold px-2">Clear All</button>
+                        </div>
+                        <div id="notif-list" class="max-h-64 overflow-y-auto py-1">
+                            <div id="no-notifs-msg" class="px-4 py-6 text-xs text-gray-400 text-center italic">No new notifications</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <main class="flex-1 p-3 md:p-8 overflow-y-auto">
+                <div id="module-content"></div>
+            </main>
+        </div>
+        
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black opacity-50 z-20 hidden md:hidden"></div>
+    </div>
+
+    <div id="custom-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4 p-6">
+            <div class="flex justify-between items-start border-b pb-3 mb-4"><h3 id="modal-title" class="text-xl font-bold">Confirmation</h3><button id="modal-close" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div>
+            <div id="modal-body" class="mb-6"><p>Are you sure?</p></div>
+            <div class="flex justify-end space-x-3"><button id="modal-cancel-button" class="px-4 py-2 bg-gray-200 rounded-lg font-medium">Cancel</button><button id="modal-confirm-button" class="px-4 py-2 bg-primary text-white rounded-lg font-bold">Confirm</button></div>
+        </div>
+    </div>
+
+    <script>
+        // --- GOOGLE APPS SCRIPT INTEGRATION FRAMEWORK ---
+        
+// --- GITHUB TO GOOGLE SHEETS BRIDGE ---
+        
+        // 🔴 PASTE YOUR DEPLOYED WEB APP URL HERE
+        const API_URL = "https://script.google.com/macros/s/AKfycbyQc7ri52gefrtjihA93lxQadR9r_jAbZDUG894fjveSzPxhvv0fgYBjzbn0Ke-Disf/exec";
+
+        async function apiRequest(action, params = {}) {
+            // Using POST helps avoid size limits of URL parameters
+            const payload = JSON.stringify({
+                action: action,
+                params: params
+            });
+
+            // "no-cors" is NOT used here because we need the JSON response.
+            // GAS "Anyone" permissions allow standard CORS.
+            const options = {
+                method: "POST",
+                body: payload
+            };
+
+            return fetch(API_URL, options)
+                .then(response => response.json())
+                .catch(error => {
+                    console.error("API Error:", error);
+                    return { success: false, message: "Connection Failed: " + error.message };
+                });
+        }
+
+        // Maintain your existing function names so the rest of your app works unchanged
+        async function sendData(action, data) {
+            return await apiRequest(action, data);
+        }
+
+        async function fetchData(action, params = {}) {
+            return await apiRequest(action, params);
+        }
+
+        // --- GLOBAL VARIABLES ---
+        let currentGroupedOrders = {};
+        let syncInterval = null; 
+        let posProducts = [], posMOPs = [], posCart = [];
+        let selectedPosItemCode = null; 
+        let expenseTypes = [], expenseCart = [];
+        let inventoryList = [], inventoryStaged = [], currentInventoryType = 'IN';
+        let employeeList = [], attendanceLogs = [], currentAttendanceType = 'TIME IN';
+        let pendingRequests = []; 
+        let orderTimerInterval = null; 
+        
+        // --- LOGIN & SESSION VARIABLES ---
+        let currentUser = null;
+
+        // --- UTILITY ---
+        const formatCurrency = (value) => {
+            const num = parseFloat(value);
+            return isNaN(num) ? '₱0.00' : '₱' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        // --- GLOBAL FUNCTIONS FOR EVENT HANDLERS ---
+        window.checkDoneStatus = (orderId) => {
+            const p = document.getElementById(`toggle-paid-${orderId}`);
+            const r = document.getElementById(`toggle-received-${orderId}`);
+            const btn = document.getElementById(`btn-done-${orderId}`);
+            if (!p || !r || !btn) return;
+            if(p.checked && r.checked) {
+                btn.disabled = false;
+                btn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                btn.classList.add('bg-green-500', 'hover:bg-green-600', 'cursor-pointer');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                btn.classList.remove('bg-green-500', 'hover:bg-green-600', 'cursor-pointer');
+            }
+        };
+
+        // --- GLOBAL EVENT HANDLERS (Updated with Refresh) ---
+        window.handleToggleStatus = (orderId, type, checkbox) => {
+            window.checkDoneStatus(orderId);
+            const isChecked = checkbox.checked;
+            
+            // 1. Notification
+            if (isChecked) {
+                const title = type === 'PAID' ? `Order #${orderId} Paid` : `Order #${orderId} Ready`;
+                const msg = type === 'PAID' ? 'Payment received successfully.' : 'Order is prepared and ready for pickup.';
+                const notifType = type === 'PAID' ? 'money' : 'success';
+                triggerNotification(title, msg, notifType);
+            }
+
+            // 2. Send Data & Refresh
+            // We use .then() to wait for the server to finish writing before we refresh
+            sendData('TOGGLE_ORDER_STATUS', { orderId: orderId, type: type, isChecked: isChecked })
+                .then(res => {
+                    if(res.success) {
+                        console.log("Status updated, refreshing dashboard...");
+                        // Refresh dashboard data to reflect the "DONE" status from the sheet
+                        initDashboardModule(true); 
+                    }
+                });
+        };
+        // --- SESSION FUNCTIONS ---
+        async function checkSession() {
+            const storedUser = sessionStorage.getItem('takos_user');
+            const loginScreen = document.getElementById('login-screen');
+            const loginBox = document.getElementById('login-box');
+            const loader = document.getElementById('session-loader');
+
+            if (storedUser) {
+                // UI: Show loader, hide form
+                loginBox.classList.add('hidden');
+                loader.classList.remove('hidden');
+                loader.classList.add('flex');
+
+                try {
+                    // Verify with Server if account is still marked ACTIVE
+                    const res = await fetchData('VERIFY_SESSION', { username: storedUser });
+                    
+                    if (res.success) {
+                        // CRITICAL FIX: Save the Full Name returned by the server check
+                        if (res.fullName) {
+                            sessionStorage.setItem('takos_fullname', res.fullName);
+                        }
+                        
+                        initializeSession(storedUser);
+                        
+                        // Fade out login screen
+                        loginScreen.style.opacity = '0';
+                        setTimeout(() => {
+                            loginScreen.classList.add('hidden');
+                        }, 300);
+                    } else {
+                        // Session Invalid
+                        sessionStorage.removeItem('takos_user');
+                        sessionStorage.removeItem('takos_fullname');
+                        loginBox.classList.remove('hidden');
+                        loader.classList.add('hidden');
+                        loader.classList.remove('flex');
+                    }
+                } catch (e) {
+                    console.error("Session check error", e);
+                    // On error, default back to login
+                    loginBox.classList.remove('hidden');
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                }
+            }
+            // If no user stored, Login Screen stays visible
+        }
+
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            const u = document.getElementById('login-username').value.trim();
+            const p = document.getElementById('login-password').value.trim();
+            const btn = document.getElementById('btn-login-submit');
+            const err = document.getElementById('login-error');
+            const origText = btn.innerHTML;
+
+            err.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>`;
+            lucide.createIcons();
+
+            try {
+                const res = await sendData('DO_LOGIN', { username: u, password: p });
+                if (res.success) {
+                    // STORE BOTH USERNAME AND FULL NAME
+                    sessionStorage.setItem('takos_user', u);
+                    sessionStorage.setItem('takos_fullname', res.fullName); 
+                    
+                    initializeSession(u);
+                    document.getElementById('login-screen').classList.add('hidden');
+                } else {
+                    err.textContent = "Invalid Username or Password";
+                    err.classList.remove('hidden');
+                }
+            } catch (error) {
+                err.textContent = "Connection Error. Try again.";
+                err.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        }
+
+        // 3. Handle Logout (Fail-Safe Version)
+        window.handleLogout = () => {
+            if(!currentUser) return;
+            
+            showModal(
+                'Confirm Logout', 
+                '<p class="text-gray-600">Are you sure you want to end your session?</p>', 
+                'Log Out', 
+                () => {
+                    // 1. Update Button UI
+                    const btn = document.getElementById('modal-confirm-button');
+                    if(btn) { 
+                        btn.disabled = true; 
+                        btn.textContent = 'Logging out...'; 
+                        btn.classList.add('bg-gray-500'); 
+                    }
+
+                    // 2. Define the Force Reload Function
+                    const forceExit = () => {
+                        sessionStorage.removeItem('takos_user');
+                        sessionStorage.removeItem('takos_fullname');
+                        window.location.reload(); // This takes you back to Login
+                    };
+
+                    // 3. Send Logout Request to Server
+                    // We do NOT use 'await' here. We use .finally() to ensure reload happens.
+                    sendData('LOGOUT_USER', { username: currentUser })
+                        .then(() => {
+                            console.log("Server logged out successfully");
+                        })
+                        .catch((e) => {
+                            console.warn("Server logout failed (offline?), forcing local logout.", e);
+                        })
+                        .finally(() => {
+                            forceExit(); // Reload page regardless of success/failure
+                        });
+
+                    // 4. Safety Net: If server takes longer than 2 seconds, force reload anyway.
+                    setTimeout(forceExit, 2000);
+                }, 
+                false 
+            );
+        };
+
+        function initializeSession(username) {
+            currentUser = username;
+            const usernameEl = document.getElementById('sidebar-username');
+            const avatarEl = document.getElementById('user-avatar');
+            
+            // Check if sidebar elements exist before updating (Fixes White Screen Crash)
+            if (usernameEl) usernameEl.textContent = username;
+            if (avatarEl) avatarEl.textContent = username.charAt(0).toUpperCase();
+            
+            lucide.createIcons();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            let notifications = [];
+            
+            // Track the time of the last notification we received
+            let lastServerTimestamp = new Date().getTime(); 
+
+            function triggerNotification(title, message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString('en-US', {hour: 'numeric', minute:'2-digit'});
+                notifications.unshift({ title, message, type, time: timestamp });
+                
+                // Update Badge & List
+                document.getElementById('notif-badge')?.classList.remove('hidden');
+                document.getElementById('no-notifs-msg')?.classList.add('hidden');
+                
+                let iconColor = 'text-gray-500 bg-gray-100', iconName = 'info';
+                if(type === 'success') { iconColor = 'text-green-500 bg-green-100'; iconName = 'check-circle'; }
+                if(type === 'order') { iconColor = 'text-primary bg-red-100'; iconName = 'shopping-bag'; }
+                if(type === 'money') { iconColor = 'text-green-600 bg-green-100'; iconName = 'banknote'; }
+
+                // --- ONCLICK HANDLER FOR NAVIGATION ---
+                const itemHTML = `
+                    <div onclick="loadModule('dashboard'); toggleNotifDropdown()" class="cursor-pointer px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex items-start gap-3 animate-fade-in">
+                        <div class="mt-0.5 p-1.5 rounded-full ${iconColor} flex-shrink-0"><i data-lucide="${iconName}" class="w-3.5 h-3.5"></i></div>
+                        <div class="flex-1 min-w-0"><p class="text-xs font-bold text-gray-800">${title}</p><p class="text-[10px] text-gray-500 break-words leading-tight mt-0.5">${message}</p><p class="text-[9px] text-gray-400 mt-1">${timestamp}</p></div>
+                    </div>`;
+                
+                document.getElementById('notif-list')?.insertAdjacentHTML('afterbegin', itemHTML);
+                lucide.createIcons();
+                showToast(title, message, type);
+            }
+
+            function showToast(title, message, type) {
+                const container = document.getElementById('toast-container');
+                if(!container) return;
+                const toast = document.createElement('div');
+                let borderClass = type === 'success' ? 'border-green-500' : (type === 'order' ? 'border-primary' : 'border-gray-500');
+                
+                toast.className = `cursor-pointer bg-white shadow-xl rounded-lg p-4 w-72 pointer-events-auto transform transition-all duration-300 toast-enter flex items-start gap-3 border-l-4 ${borderClass}`;
+                
+                toast.innerHTML = `<div class="flex-1"><h4 class="text-sm font-bold text-gray-800">${title}</h4><p class="text-xs text-gray-600 mt-1">${message}</p></div><button class="text-gray-400 hover:text-gray-600 toast-close-btn"><i data-lucide="x" class="w-4 h-4"></i></button>`;
+                
+                toast.addEventListener('click', (e) => {
+                    // Navigate unless hitting X
+                    if (!e.target.closest('button')) {
+                        loadModule('dashboard');
+                        toast.remove();
+                    } else {
+                        toast.remove();
+                    }
+                });
+
+                container.appendChild(toast);
+                lucide.createIcons();
+                setTimeout(() => { if(toast.parentElement) { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); } }, 4000);
+            }
+
+            // --- FIXED: Defined as function first so it can be exposed later ---
+            function toggleNotifDropdown() {
+                const d = document.getElementById('notif-dropdown');
+                if(d) { 
+                    d.classList.toggle('hidden'); 
+                    if(!d.classList.contains('hidden')) document.getElementById('notif-badge')?.classList.add('hidden'); 
+                }
+            }
+
+            window.clearNotifications = () => {
+                notifications = [];
+                const list = document.getElementById('notif-list');
+                if(list) list.innerHTML = '<div id="no-notifs-msg" class="px-4 py-6 text-xs text-gray-400 text-center italic">No new notifications</div>';
+                document.getElementById('notif-badge')?.classList.add('hidden');
+            };
+            
+            // --- CENTRALIZED POLLING LOGIC ---
+            function startNotificationPolling() {
+                setInterval(() => {
+                    // Ask server for anything newer than our last timestamp
+                    fetchData('FETCH_NOTIFICATIONS', { lastTimestamp: lastServerTimestamp }).then(res => {
+                        if(res.success) {
+                            // Update our timestamp so we don't fetch these again
+                            if (res.latestTime > lastServerTimestamp) {
+                                lastServerTimestamp = res.latestTime;
+                            }
+                            // Trigger UI for each new notification
+                            if (res.data && res.data.length > 0) {
+                                res.data.forEach(n => {
+                                    triggerNotification(n.title, n.message, n.type);
+                                });
+                            }
+                        }
+                    });
+                }, 10000); // Check every 10 seconds
+            }
+            startNotificationPolling();
+            // ---------------------------------
+
+            // --- INIT SESSION ---
+            checkSession(); 
+            document.getElementById('login-form').addEventListener('submit', handleLoginSubmit);
+
+            const body = document.body;
+            const sidebar = document.getElementById('sidebar');
+            const toggleButton = document.getElementById('sidebar-toggle');
+            const toggleIcon = document.getElementById('toggle-icon');
+            const overlay = document.getElementById('sidebar-overlay');
+            const navLinks = document.querySelectorAll('.nav-link');
+            const moduleContent = document.getElementById('module-content');
+            const pageTitle = document.getElementById('page-title');
+            
+            // --- DATE DISPLAY ---
+            function updateDateDisplay() {
+                const dateElement = document.getElementById('header-date-display'); 
+                if (dateElement) {
+                    const now = new Date();
+                    const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+                    dateElement.textContent = now.toLocaleDateString('en-US', options); 
+                }
+            }
+            setInterval(updateDateDisplay, 60000);
+
+            // --- NAVIGATION ---
+            const isMobile = () => window.innerWidth < 768;
+
+            function toggleSidebar(show) {
+                body.classList.toggle('sidebar-is-open', show);
+                if (show) {
+                    toggleIcon.setAttribute('data-lucide', 'chevron-left');
+                    if (isMobile()) { overlay.classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
+                } else {
+                    toggleIcon.setAttribute('data-lucide', 'chevron-right');
+                    overlay.classList.add('hidden');
+                    document.body.style.overflow = '';
+                }
+                lucide.createIcons();
+            }
+
+            function loadModule(moduleName) {
+                if (orderTimerInterval) { clearInterval(orderTimerInterval); orderTimerInterval = null; }
+                if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
+
+                navLinks.forEach(link => {
+                    link.classList.remove('bg-primary', 'shadow-lg', 'text-white');
+                    link.classList.add('text-gray-300');
+                });
+                const activeLink = document.querySelector(`[data-module="${moduleName}"]`);
+                if (activeLink) {
+                    activeLink.classList.add('bg-primary', 'shadow-lg', 'text-white');
+                    activeLink.classList.remove('text-gray-300');
+                }
+
+                let title, contentHTML;
+                switch(moduleName) {
+                    case 'dashboard': title = 'Dashboard'; contentHTML = generateDashboardContent(); setTimeout(() => initDashboardModule(false), 0); break;
+                    case 'pos': title = 'POS'; contentHTML = generatePOSContent(); setTimeout(initPOSModule, 0); break;
+                    case 'expenses': title = 'Expenses'; contentHTML = generateExpensesContent(); setTimeout(initExpensesModule, 0); break;
+                    case 'inventory': title = 'Inventory'; contentHTML = generateInventoryContent(); setTimeout(() => initInventoryModule(false), 0); break;
+                    case 'attendance': title = 'Attendance'; contentHTML = generateAttendanceContent(); setTimeout(initAttendanceModule, 0); break;
+                    case 'reports': title = 'Report'; contentHTML = generateReportsContent(); setTimeout(initReportsModule, 0); break;
+                    default: title = 'Not Found'; contentHTML = `<div class="p-6 bg-white rounded-xl shadow-lg">Module not found.</div>`;
+                }
+
+                pageTitle.textContent = title;
+                moduleContent.innerHTML = contentHTML;
+                if (body.classList.contains('sidebar-is-open')) { toggleSidebar(false); }
+                lucide.createIcons(); 
+            }
+            
+            // --- MODULE LOGIC: DASHBOARD ---
+            async function initDashboardModule(isRefresh = false) {
+                try {
+                    const response = await fetchData('GET_DASHBOARD_DATA');
+                    if (!syncInterval) { syncInterval = setInterval(() => initDashboardModule(true), 15000); }
+
+                    if (response.success && response.data) {
+                        const m = response.data.metrics;
+                        if(m) {
+                            document.getElementById('dash-total-sales').textContent = formatCurrency(m.sales);
+                            document.getElementById('dash-total-expenses').textContent = formatCurrency(m.expenses);
+                            document.getElementById('dash-total-discounts').textContent = formatCurrency(m.discounts);
+                            document.getElementById('dash-cash').textContent = formatCurrency(m.cash);
+                            document.getElementById('dash-gcash').textContent = formatCurrency(m.gcash);
+                            document.getElementById('dash-bpi').textContent = formatCurrency(m.bpi);
+                            document.getElementById('dash-gotyme').textContent = formatCurrency(m.gotyme);
+                            document.getElementById('dash-aov').textContent = formatCurrency(m.aov);
+                            document.getElementById('dash-orders').textContent = m.orders;
+                        }
+                        
+                        const activeOrdersList = response.data.activeOrders || [];
+                        const completedOrdersList = response.data.completedOrders || [];
+                        const activeContainer = document.getElementById('orders-active-container');
+                        const completedContainer = document.getElementById('orders-completed-body');
+                        
+                        if(activeContainer && completedContainer) {
+                            activeContainer.innerHTML = '';
+                            completedContainer.innerHTML = '';
+                            currentGroupedOrders = {}; 
+
+                            if (activeOrdersList.length === 0) {
+                                activeContainer.innerHTML = `<div class="p-6 text-center text-gray-500 bg-white rounded-lg shadow-sm col-span-3">No active orders.</div>`;
+                            } else {
+                                const groupedActive = {};
+                                activeOrdersList.forEach(o => {
+                                    if(!groupedActive[o.OrderNo]) {
+                                        const elapsed = o.Elapsed || 0; 
+                                        const startTime = Date.now() - elapsed;
+                                        groupedActive[o.OrderNo] = {
+                                            OrderNo: o.OrderNo,
+                                            Customer: o.Customer,
+                                            MOP: o.MOP,
+                                            Subtotal: 0,
+                                            Discount: 0,
+                                            Total: 0,
+                                            StartTime: startTime, 
+                                            PaidStatus: o.PaidStatus,
+                                            ReadyStatus: o.ReadyStatus,
+                                            Items: []
+                                        };
+                                        currentGroupedOrders[o.OrderNo] = groupedActive[o.OrderNo];
+                                    }
+                                    groupedActive[o.OrderNo].Items.push(o);
+                                    if (o.Total) groupedActive[o.OrderNo].Total = o.Total;
+                                    if (o.Discount) groupedActive[o.OrderNo].Discount = o.Discount;
+                                    if (o.Subtotal) groupedActive[o.OrderNo].Subtotal = o.Subtotal;
+                                });
+
+                                let activeHTML = '<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 w-full">'; 
+                                Object.values(groupedActive).forEach(group => {
+                                    const mop = group.MOP || 'Cash';
+                                    let badgeColor = 'bg-gray-100 text-gray-800';
+                                    if(mop.toLowerCase().includes('cash')) badgeColor = 'bg-green-100 text-green-800';
+                                    if(mop.toLowerCase().includes('gcash')) badgeColor = 'bg-blue-100 text-blue-800';
+                                    
+                                    const isPaidChecked = group.PaidStatus ? 'checked' : '';
+                                    const isReadyChecked = group.ReadyStatus ? 'checked' : '';
+
+                                    activeHTML += `
+                                    <div class="relative bg-white border border-gray-200 border-t-8 border-gray-400 rounded-xl shadow-lg overflow-visible order-card h-fit mt-4" id="card-order-${group.OrderNo}">
+                                        <div id="status-badge-${group.OrderNo}" class="absolute -top-4 left-4 px-4 py-1.5 rounded-full text-white text-xs font-bold shadow-md z-20 transition-colors bg-gray-600 ring-2 ring-white">Loading...</div>
+                                        <div class="bg-gray-50 p-4 pt-6 flex justify-between items-start border-b border-gray-200">
+                                            <div class="flex flex-col gap-1 mr-2">
+                                                <div class="font-bold text-gray-900 text-xl leading-none">Order #${group.OrderNo}</div>
+                                                <div class="text-sm font-semibold text-primary uppercase tracking-wide truncate max-w-[160px]" title="${group.Customer}">${group.Customer || 'Guest'}</div>
+                                                <div class="mt-2"><span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border inline-block ${badgeColor}">${mop}</span></div>
+                                            </div>
+                                            <div class="flex flex-col items-end gap-2">
+                                                <button id="btn-done-${group.OrderNo}" onclick="markOrderDone('${group.OrderNo}')" disabled class="bg-gray-400 text-white text-xs font-bold px-4 py-2 rounded-lg shadow flex items-center h-8 cursor-not-allowed transition-all">DONE <i data-lucide="check" class="w-3 h-3 ml-1"></i></button>
+                                                <div class="timer-display font-mono font-bold text-lg bg-white border border-gray-300 px-3 py-1 rounded text-gray-700 shadow-sm text-center min-w-[70px]" data-start-time="${group.StartTime}" id="timer-${group.OrderNo}">...</div>
+                                            </div>
+                                        </div>
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-sm text-left">
+                                                <thead class="bg-white text-gray-500 border-b text-xs uppercase"><tr><th class="py-2 px-3">Item</th><th class="py-2 px-3 text-center">Qty</th><th class="py-2 px-3 text-right">Amt</th></tr></thead>
+                                                <tbody class="divide-y divide-gray-100">${group.Items.map(item => `<tr><td class="py-2 px-3 font-medium text-gray-800">${item.Code}</td><td class="py-2 px-3 text-center font-bold text-gray-700">${item.Qty}</td><td class="py-2 px-3 text-right font-medium">${formatCurrency(item.Amount)}</td></tr>`).join('')}</tbody>
+                                            </table>
+                                        </div>
+                                        <div class="bg-gray-50 p-3 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-3 text-sm">
+                                            <div class="flex gap-6 w-full md:w-auto self-start md:self-center items-center py-2">
+                                                <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer" id="toggle-paid-${group.OrderNo}" ${isPaidChecked} onchange="handleToggleStatus('${group.OrderNo}', 'PAID', this)"><div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div><span class="ml-2 text-base md:text-sm font-bold text-gray-400 peer-checked:text-green-600 select-none">PAID</span></label>
+                                                <label class="inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer" id="toggle-received-${group.OrderNo}" ${isReadyChecked} onchange="handleToggleStatus('${group.OrderNo}', 'READY', this)"><div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div><span class="ml-2 text-base md:text-sm font-bold text-gray-400 peer-checked:text-blue-600 select-none">ORDER READY</span></label>
+                                            </div>
+                                            <div class="text-right w-full md:w-auto">${group.Discount > 0 ? `<div class="text-red-500 font-medium">Discount: -${formatCurrency(group.Discount)}</div>` : ''}<div class="font-bold text-gray-900 text-base">Total: ${formatCurrency(group.Total)}</div></div>
+                                        </div>
+                                    </div>`;
+                                });
+                                activeHTML += '</div>';
+                                activeContainer.innerHTML = activeHTML;
+                                Object.values(groupedActive).forEach(group => checkDoneStatus(group.OrderNo));
+                                startOrderTimers();
+                                lucide.createIcons(); 
+                            }
+
+                            if (completedOrdersList.length === 0) {
+                                completedContainer.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">No completed orders yet.</td></tr>`;
+                            } else {
+                                const groupedCompleted = {};
+                                completedOrdersList.forEach(o => {
+                                    if(!groupedCompleted[o.OrderNo]) { groupedCompleted[o.OrderNo] = { ...o, Items: [] }; }
+                                    groupedCompleted[o.OrderNo].Items.push(o);
+                                });
+                                const sortedOrderNos = Object.keys(groupedCompleted).sort((a,b) => b - a);
+                                completedContainer.innerHTML = sortedOrderNos.map(orderNo => {
+                                    const group = groupedCompleted[orderNo];
+                                    return group.Items.map((item, index) => {
+                                        const isFirst = index === 0;
+                                        const rowSpan = group.Items.length;
+                                        const borderClass = (index === group.Items.length - 1) ? 'border-b-2 border-gray-200' : 'border-b border-gray-50';
+                                        let html = `<tr class="hover:bg-gray-50 text-[10px] md:text-sm ${borderClass} bg-white transition-colors">`;
+                                        if(isFirst) {
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 font-bold text-gray-800 align-top" rowspan="${rowSpan}">${item.OrderNo}</td>`;
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-gray-700 align-top font-medium" rowspan="${rowSpan}">${item.Customer}</td>`;
+                                        }
+                                        html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-gray-600">${item.Code}</td>`;
+                                        html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-center font-semibold text-gray-700">${item.Qty}</td>`;
+                                        html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-right text-gray-600">${formatCurrency(item.Amount)}</td>`;
+                                        if(isFirst) {
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-right text-gray-600 align-top font-medium" rowspan="${rowSpan}">${formatCurrency(item.Subtotal)}</td>`;
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-right text-red-500 align-top font-medium" rowspan="${rowSpan}">${item.Discount > 0 ? '-' + formatCurrency(item.Discount) : '0'}</td>`;
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-right font-bold text-gray-900 align-top text-xs md:text-base" rowspan="${rowSpan}">${formatCurrency(item.Total)}</td>`;
+                                            html += `<td class="py-1 px-0.5 md:py-3 md:px-4 text-center align-top" rowspan="${rowSpan}"><span class="text-[9px] md:text-[10px] font-bold uppercase px-1.5 py-0.5 md:px-2 md:py-1 rounded-full border bg-gray-100 text-gray-800">${item.MOP}</span></td>`;
+                                        }
+                                        html += `</tr>`;
+                                        return html;
+                                    }).join('');
+                                }).join('');
+                            }
+                        }
+                    }
+                } catch (e) { 
+                    console.error("Dashboard Load Error", e);
+                }
+            }
+            
+            window.startOrderTimers = () => {
+                if (orderTimerInterval) clearInterval(orderTimerInterval);
+                const updateTimers = () => {
+                    const timerElements = document.querySelectorAll('.timer-display');
+                    const now = new Date().getTime();
+                    timerElements.forEach(el => {
+                        const startTime = parseInt(el.getAttribute('data-start-time'));
+                        const orderId = el.id.replace('timer-', '');
+                        const statusBadge = document.getElementById(`status-badge-${orderId}`);
+                        const elapsed = now - startTime;
+                        const totalDuration = 12 * 60 * 1000; 
+                        const remaining = totalDuration - elapsed;
+                        let statusText = "Preparing...";
+                        let statusColorClass = "bg-gray-600"; 
+
+                        if (remaining <= 0) {
+                            el.textContent = "00:00";
+                            el.classList.add('bg-red-100', 'text-red-700');
+                            statusText = "Completed?";
+                            statusColorClass = "bg-red-600 animate-pulse";
+                        } else {
+                            const minutes = Math.floor(remaining / 60000);
+                            const seconds = Math.floor((remaining % 60000) / 1000);
+                            el.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                            if (minutes < 5) {
+                                el.classList.add('bg-orange-100', 'text-orange-700');
+                                statusText = "Hurry!";
+                                statusColorClass = "bg-orange-500";
+                            }
+                        }
+                        if (statusBadge) {
+                            statusBadge.textContent = statusText;
+                            statusBadge.className = `absolute -top-4 left-4 px-4 py-1.5 rounded-full text-white text-xs font-bold shadow-md z-20 transition-colors ring-2 ring-white ${statusColorClass}`;
+                        }
+                    });
+                };
+                updateTimers(); 
+                orderTimerInterval = setInterval(updateTimers, 1000);
+            };
+
+            window.markOrderDone = (orderId) => {
+                const card = document.getElementById(`card-order-${orderId}`);
+                if(card) {
+                    // Visual feedback immediately
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    
+                    sendData('MARK_ORDER_DONE', { orderId: orderId })
+                        .then(() => {
+                            // Wait a moment for visual transition, then hard refresh data
+                            setTimeout(() => {
+                                initDashboardModule(true);
+                            }, 500);
+                        });
+                }
+            };
+
+            function initPOSModule() {
+                selectedPosItemCode = null;
+                fetchData('GET_POS_DATA').then(res => { 
+                    if(res.success) { 
+                        posProducts = res.data.products; 
+                        posMOPs = res.data.mops; 
+                        // Sort: items starting with numbers/letters naturally
+                        posProducts.sort((a, b) => (a.Code||"").localeCompare((b.Code||""), undefined, { numeric: true }));
+                        renderPosGrid(); 
+                        populateMOPDropdown(); 
+                    } 
+                });
+
+                window.renderPosGrid = () => {
+                    const container = document.getElementById('pos-grid-container');
+                    if (!container) return;
+                    container.innerHTML = '';
+
+                    posProducts.forEach(p => {
+                        const btn = document.createElement('button');
+                        btn.id = `item-btn-${p.Code}`;
+                        
+                        // --- COLOR LOGIC RESTORED ---
+                        const code = (p.Code || "").toUpperCase();
+                        const prefix = code.substring(0, 2);
+                        const firstChar = code.substring(0, 1);
+                        
+                        // Default (White bg, Gray text)
+                        let colorClasses = "bg-white border-gray-200 text-gray-800 hover:border-gray-400";
+                        let badgeClasses = "bg-gray-100 text-gray-800"; 
+                        let subTextClasses = "text-gray-500"; 
+
+                        // 1. Check First Character 'X' (Black Background)
+                        if (firstChar === 'X') {
+                            colorClasses = "bg-gray-900 border-gray-900 text-white hover:bg-black";
+                            badgeClasses = "bg-white/20 text-white";
+                            subTextClasses = "text-gray-400";
+                        }
+                        // 2. Check 2-Letter Prefixes (Pastel Colors)
+                        else {
+                            const pastelText = "text-gray-900"; 
+                            const pastelSubText = "text-gray-700";
+                            const pastelBadge = "bg-white/60 text-gray-900";
+
+                            if (prefix === 'CB') { colorClasses = `bg-orange-200 border-orange-200 ${pastelText} hover:bg-orange-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'RV') { colorClasses = `bg-teal-200 border-teal-200 ${pastelText} hover:bg-teal-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'KM') { colorClasses = `bg-yellow-200 border-yellow-200 ${pastelText} hover:bg-yellow-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'DY') { colorClasses = `bg-lime-200 border-lime-200 ${pastelText} hover:bg-lime-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'HC') { colorClasses = `bg-pink-200 border-pink-200 ${pastelText} hover:bg-pink-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'CT') { colorClasses = `bg-purple-200 border-purple-200 ${pastelText} hover:bg-purple-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'KK') { colorClasses = `bg-red-200 border-red-200 ${pastelText} hover:bg-red-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; } 
+                            else if (prefix === 'VC') { colorClasses = `bg-green-200 border-green-200 ${pastelText} hover:bg-green-300`; badgeClasses = pastelBadge; subTextClasses = pastelSubText; }
+                        }
+
+                        // Base Styling
+                        let baseClass = `flex flex-col items-center justify-center p-2 border rounded-lg shadow-sm transition-all duration-200 h-24 group relative overflow-hidden ${colorClasses} `;
+                        
+                        // Selection State (Ring)
+                        if (p.Code === selectedPosItemCode) { 
+                            baseClass += " ring-4 ring-offset-2 ring-gray-900 scale-[0.98] z-10"; 
+                        } else {
+                            baseClass += " hover:shadow-md";
+                        }
+
+                        btn.className = baseClass;
+                        
+                        // Click Handler
+                        btn.onclick = () => { 
+                            selectedPosItemCode = p.Code; 
+                            renderPosGrid(); 
+                            const addBtn = document.getElementById('pos-add-btn');
+                            if(addBtn) addBtn.disabled = false; 
+                        };
+
+                        // Button Content
+                        btn.innerHTML = `
+                            <span class="text-sm font-bold mb-1 break-all leading-tight">${p.Code}</span>
+                            <span class="text-[10px] ${subTextClasses} line-clamp-2 leading-tight px-1 font-medium">${p.Item}</span>
+                            <span class="mt-auto text-xs font-bold px-2 py-0.5 rounded-full ${badgeClasses}">₱${p.Price}</span>
+                        `;
+                        container.appendChild(btn);
+                    });
+                };
+
+                window.addSelectedToCart = () => {
+                    if (!selectedPosItemCode) return;
+                    const product = posProducts.find(p => p.Code === selectedPosItemCode);
+                    const qtyInput = document.getElementById('item-qty-input');
+                    const qty = parseInt(qtyInput.value) || 1;
+                    const existingItemIndex = posCart.findIndex(item => item.Code === product.Code);
+                    if (existingItemIndex > -1) { posCart[existingItemIndex].Qty += qty; } else { posCart.push({ Code: product.Code, Item: product.Item, Price: product.Price, Qty: qty }); }
+                    qtyInput.value = 1; 
+                    updateCartDisplay(); updateCheckoutSummary();
+                };
+
+                window.populateMOPDropdown = () => {
+                    const dropdown = document.getElementById('mop-select');
+                    if (!dropdown) return;
+                    dropdown.innerHTML = '';
+                    posMOPs.forEach(mop => { const option = document.createElement('option'); option.value = mop; option.textContent = mop; dropdown.appendChild(option); });
+                };
+
+                window.handleQtyChange = (delta) => {
+                    const qtyInput = document.getElementById('item-qty-input');
+                    let currentQty = parseInt(qtyInput.value) || 1;
+                    currentQty += delta;
+                    if (currentQty < 1) currentQty = 1;
+                    qtyInput.value = currentQty;
+                };
+
+                window.removeItemFromCart = (code) => { posCart = posCart.filter(item => item.Code !== code); updateCartDisplay(); updateCheckoutSummary(); };
+
+                window.updateCartDisplay = () => {
+                    const cartBody = document.getElementById('cart-table-body');
+                    if (!cartBody) return;
+                    cartBody.innerHTML = posCart.length === 0 ? `<tr><td colspan="4" class="text-center py-10 text-gray-400 text-sm italic">Cart is empty</td></tr>` : posCart.map(item => `
+                        <tr class="text-gray-700 border-b border-gray-50 hover:bg-gray-50">
+                            <td class="px-2 py-2 text-sm"><div class="font-bold text-gray-800 text-xs">${item.Code}</div><div class="text-xs text-gray-500 truncate max-w-[120px]">${item.Item}</div></td>
+                            <td class="px-1 py-2 text-sm text-center font-semibold bg-gray-50 rounded">${item.Qty}</td>
+                            <td class="px-2 py-2 text-sm text-right font-medium">${formatCurrency(item.Price * item.Qty)}</td>
+                            <td class="px-1 py-2 text-center"><button onclick="removeItemFromCart('${item.Code}')" class="text-gray-400 hover:text-red-500 transition-colors p-1"><i data-lucide="x" class="w-4 h-4"></i></button></td>
+                        </tr>`).join('');
+                    lucide.createIcons(); 
+                };
+
+                window.updateCheckoutSummary = () => {
+                    const subtotal = posCart.reduce((sum, item) => sum + (item.Price * item.Qty), 0);
+                    const discount = parseFloat(document.getElementById('discount-input').value) || 0;
+                    document.getElementById('subtotal-display').textContent = formatCurrency(subtotal);
+                    document.getElementById('total-display').textContent = formatCurrency(subtotal - discount);
+                };
+
+                window.clearOrder = () => {
+                    if (posCart.length === 0) return;
+                    showModal('Confirm Clear', '<p>Clear all items?</p>', 'Yes', () => {
+                        posCart = []; updateCartDisplay(); updateCheckoutSummary(); hideModal();
+                        document.getElementById('customer-name-input').value = '';
+                    }, false);
+                };
+
+                // --- UPDATED CHECKOUT LOGIC ---
+                window.checkoutOrder = () => {
+                    if (posCart.length === 0) return;
+                    
+                    const subtotal = posCart.reduce((sum, item) => sum + (item.Price * item.Qty), 0);
+                    const discount = parseFloat(document.getElementById('discount-input').value) || 0;
+                    const customerName = document.getElementById('customer-name-input').value.trim();
+                    const mop = document.getElementById('mop-select').value;
+                    const data = { cart: posCart, subtotal, discount, total: subtotal - discount, mop: mop, customerName: customerName };
+                    
+                    const btn = document.getElementById('checkout-button');
+                    const orig = btn.innerHTML;
+                    btn.disabled = true; 
+                    btn.textContent = 'Processing...';
+                    
+                    sendData('SAVE_TRANSACTION', data).then(res => {
+                        if (res.success) { 
+                            // 1. TRIGGER NOTIFICATION
+                            triggerNotification('New Order Placed', `${customerName || 'Guest'} - ${formatCurrency(subtotal - discount)} (${mop})`, 'order');
+                            
+                            // 2. CLEAR CART IMMEDIATELY (Do not wait for modal click)
+                            posCart = []; 
+                            updateCartDisplay(); 
+                            updateCheckoutSummary(); 
+                            document.getElementById('customer-name-input').value = '';
+
+                            // 3. SHOW CONFIRMATION MODAL
+                            // increased z-index in CSS ensures it shows over everything
+                            showModal('Success!', `<p class="text-green-600 font-bold text-lg">${res.message}</p>`, 'New Order', hideModal, true); 
+                        } 
+                        else { 
+                            showModal('Error', `<p class="text-red-500 font-bold">${res.message}</p>`, 'Close', hideModal, true); 
+                        }
+                    }).catch(err => {
+                        showModal('System Error', `<p class="text-red-500">${err.message}</p>`, 'Close', hideModal, true);
+                    }).finally(() => { 
+                        btn.disabled = false; 
+                        btn.innerHTML = orig; 
+                        lucide.createIcons(); 
+                    });
+                };
+                
+                document.getElementById('discount-input')?.addEventListener('input', updateCheckoutSummary);
+                updateCartDisplay(); updateCheckoutSummary();
+            }
+
+            // --- MODULE LOGIC: EXPENSES ---
+            function initExpensesModule() {
+                fetchData('GET_EXPENSE_DATA').then(res => { if(res.success) { expenseTypes = res.data.expenseTypes; const dd=document.getElementById('expense-type-select'); dd.innerHTML='<option value="" disabled selected>Select Type</option>'; expenseTypes.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;dd.appendChild(o)}); } });
+                window.handleExpenseQtyChange = (delta) => { const q=document.getElementById('expense-qty-input'); let v=parseInt(q.value)||1; v+=delta; if(v<1)v=1; q.value=v; };
+                window.handleAddToExpenseCart = () => {
+                    const type=document.getElementById('expense-type-select').value, item=document.getElementById('expense-item-input').value.trim(), qty=parseInt(document.getElementById('expense-qty-input').value)||0, price=parseFloat(document.getElementById('expense-price-input').value)||0;
+                    if(!type||!item||qty<=0||price<=0)return;
+                    expenseCart.push({id:Date.now(),Type:type,Item:item,Qty:qty,Price:price});
+                    updateExpenseCartDisplay(); updateExpenseSummary();
+                    document.getElementById('expense-item-input').value=''; document.getElementById('expense-qty-input').value=1;
+                };
+                window.removeExpenseItem = (id) => { expenseCart=expenseCart.filter(i=>i.id!==id); updateExpenseCartDisplay(); updateExpenseSummary(); };
+                window.updateExpenseCartDisplay = () => {
+                    const b=document.getElementById('expense-cart-table-body'); if(!b)return;
+                    b.innerHTML = expenseCart.length===0 ? `<tr><td colspan="6" class="text-center py-8 text-gray-500">Empty.</td></tr>` : expenseCart.map(i=>`<tr class="text-xs"><td class="px-1 py-1">${i.Type}</td><td class="px-1 py-1">${i.Item}</td><td class="px-1 py-1 text-center">${i.Qty}</td><td class="px-1 py-1 text-right">${formatCurrency(i.Price)}</td><td class="px-1 py-1 text-right">${formatCurrency(i.Price*i.Qty)}</td><td class="px-1 py-1 text-center"><button onclick="removeExpenseItem(${i.id})" class="text-red-500"><i data-lucide="x" class="w-3 h-3"></i></button></td></tr>`).join('');
+                    lucide.createIcons();
+                };
+                window.updateExpenseSummary = () => { document.getElementById('expense-total-display').textContent=formatCurrency(expenseCart.reduce((s,i)=>s+(i.Price*i.Qty),0)); };
+                window.handleClearExpenseCart = () => { expenseCart=[]; updateExpenseCartDisplay(); updateExpenseSummary(); };
+                window.handleAddExpense = () => {
+                    if(expenseCart.length===0)return;
+                    const btn=document.getElementById('add-expense-button'), orig=btn.innerHTML;
+                    btn.disabled=true; btn.textContent='Saving...';
+                    sendData('SAVE_EXPENSE',{items:expenseCart,total:expenseCart.reduce((s,i)=>s+(i.Price*i.Qty),0).toFixed(2)}).then(res=>{
+                        if(res.success) showModal('Saved', `<p class="text-green-600">Recorded.</p>`, 'OK', ()=>{expenseCart=[];updateExpenseCartDisplay();updateExpenseSummary();hideModal()}, true);
+                    }).finally(()=>{btn.disabled=false;btn.innerHTML=orig;lucide.createIcons()});
+                };
+                document.getElementById('add-to-expense-cart-button')?.addEventListener('click', handleAddToExpenseCart);
+            }
+
+            // --- MODULE LOGIC: INVENTORY ---
+            function initInventoryModule() {
+                // 1. Fetch Data & Setup Dropdowns
+                fetchData('GET_INVENTORY_DATA').then(res => { 
+                    if(res.success) { 
+                        inventoryList = res.data; 
+                        const catSelect = document.getElementById('inventory-category-select'); 
+                        const itemSelect = document.getElementById('inventory-item-select');
+                        
+                        // Extract Unique Categories
+                        const categories = [...new Set(inventoryList.map(item => item.category))].sort();
+                        
+                        // Populate Category Dropdown
+                        catSelect.innerHTML = '<option value="" disabled selected>Select Category...</option>';
+                        categories.forEach(cat => {
+                            const option = document.createElement('option');
+                            option.value = cat;
+                            option.textContent = cat;
+                            catSelect.appendChild(option);
+                        });
+
+                        // Event Listener: When Category Changes -> Update Items
+                        catSelect.addEventListener('change', function() {
+                            const selectedCat = this.value;
+                            
+                            // Enable Item Select
+                            itemSelect.disabled = false;
+                            itemSelect.classList.remove('bg-gray-50', 'text-gray-500', 'cursor-not-allowed');
+                            itemSelect.classList.add('bg-white', 'text-gray-800');
+                            
+                            // Filter Items
+                            const filteredItems = inventoryList.filter(i => i.category === selectedCat).sort((a,b) => a.item.localeCompare(b.item));
+                            
+                            // Populate Item Dropdown
+                            itemSelect.innerHTML = '<option value="" disabled selected>Select Item...</option>';
+                            filteredItems.forEach(p => {
+                                const o = document.createElement('option');
+                                o.value = p.item;
+                                o.textContent = `${p.item} (${p.unit})`;
+                                itemSelect.appendChild(o);
+                            });
+                        });
+                    } 
+                });
+
+                fetchData('GET_INVENTORY_REQUESTS').then(res => { 
+                    if(res.success) { 
+                        pendingRequests = res.data; 
+                        renderInventoryRequests(); 
+                    } 
+                });
+
+                // 2. Tab Logic
+                window.setInventoryTab = (type) => { 
+                    currentInventoryType = type;
+                    const tabConfig = {
+                        'IN': { border: 'border-blue-500', text: 'text-blue-700', btn: 'bg-blue-600 hover:bg-blue-700' },
+                        'OUT': { border: 'border-green-500', text: 'text-green-700', btn: 'bg-green-600 hover:bg-green-700' },
+                        'REJ': { border: 'border-red-500', text: 'text-red-700', btn: 'bg-red-600 hover:bg-red-700' },
+                        'REQ': { border: 'border-yellow-500', text: 'text-yellow-700', btn: 'bg-yellow-500 hover:bg-yellow-600' }
+                    };
+                    ['IN', 'OUT', 'REJ', 'REQ'].forEach(t => { 
+                        const btn = document.getElementById(`inv-tab-${t}`); 
+                        if(btn) {
+                            if (t === type) {
+                                btn.className = `flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 bg-white ${tabConfig[t].border} ${tabConfig[t].text}`;
+                            } else {
+                                btn.className = `flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500 hover:bg-gray-200`;
+                            }
+                        }
+                    });
+                    const addBtn = document.getElementById('add-inventory-btn');
+                    if (addBtn) {
+                        addBtn.className = `w-full h-12 text-white rounded-lg font-bold shadow-md flex items-center justify-center transition-colors ${tabConfig[type].btn}`;
+                    }
+                };
+
+                // 3. Handlers
+                window.handleInventoryQtyChange = (delta) => { 
+                    const q = document.getElementById('inventory-qty-input'); 
+                    let v = parseInt(q.value) || 1; 
+                    v += delta; 
+                    if(v < 1) v = 1; 
+                    q.value = v; 
+                };
+
+                // --- 1. RENDER REQUESTS (Updated with X Button) ---
+                window.renderInventoryRequests = () => {
+                    const c = document.getElementById('inventory-requests-container'); 
+                    if(!c) return;
+                    
+                    if(pendingRequests.length === 0) { 
+                        c.innerHTML = `
+                            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 text-center flex flex-col items-center justify-center py-10">
+                                <div class="bg-green-50 p-3 rounded-full mb-3">
+                                    <i data-lucide="check-circle-2" class="w-8 h-8 text-green-500 opacity-80"></i>
+                                </div>
+                                <h3 class="text-gray-800 font-bold text-sm">No Pending Requests</h3>
+                                <p class="text-gray-400 text-xs mt-1">All inventory requests have been fulfilled.</p>
+                            </div>`; 
+                        lucide.createIcons();
+                        return; 
+                    }
+                    
+                    const earliestDate = pendingRequests[0].Date;
+                    c.innerHTML = `
+                        <div class="bg-white rounded-xl shadow-lg border-l-4 border-orange-500 overflow-hidden mb-6">
+                            <div class="bg-orange-50 px-4 py-3 border-b border-orange-100 flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <i data-lucide="alert-circle" class="w-5 h-5 text-orange-500 mr-2"></i>
+                                    <div>
+                                        <span class="text-xs font-bold text-orange-600 uppercase tracking-wide">Date Requested</span>
+                                        <div class="font-bold text-gray-800">${earliestDate}</div>
+                                    </div>
+                                </div>
+                                <button id="btn-fulfill-requests" onclick="handleFulfillRequests()" disabled class="bg-gray-300 text-gray-500 px-4 py-2 rounded-lg font-bold text-sm shadow-sm flex items-center transition-all cursor-not-allowed">
+                                    <i data-lucide="check-square" class="w-4 h-4 mr-2"></i> FULFILLED
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto w-full mx-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-white text-gray-500 border-b text-xs uppercase">
+                                        <tr>
+                                            <th class="py-2 px-4 w-10"></th>
+                                            <th class="py-2 px-4">Category</th>
+                                            <th class="py-2 px-4">Item</th>
+                                            <th class="py-2 px-4 text-center">Unit</th>
+                                            <th class="py-2 px-4 text-right">Qty</th>
+                                            <th class="py-2 px-4 w-10"></th> </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        ${pendingRequests.map((r,i) => `
+                                            <tr class="hover:bg-orange-50 transition-colors group">
+                                                <td class="py-2 px-4 text-center"><input type="checkbox" class="req-checkbox w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500" data-index="${i}" onchange="toggleFulfillButton()"></td>
+                                                <td class="py-2 px-4 text-gray-600">${r.Category}</td>
+                                                <td class="py-2 px-4 font-medium text-gray-800">${r.Item}</td>
+                                                <td class="py-2 px-4 text-center text-gray-500">${r.Unit}</td>
+                                                <td class="py-2 px-4 text-right font-bold">${r.Qty}</td>
+                                                <td class="py-2 px-4 text-center">
+                                                    <button onclick="handleRejectRequest(${i})" class="text-gray-300 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50" title="Reject / Cancel">
+                                                        <i data-lucide="x" class="w-4 h-4"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>`).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>`;
+                    lucide.createIcons();
+                };
+
+                // Inside initInventoryModule
+                window.handleRejectRequest = (index) => {
+                    const item = pendingRequests[index]; // MUST contain: Category, Item, Qty
+                    if(!item) return;
+
+                    showModal('Reject Request?', 
+                        `<p class="text-sm text-gray-600">Cancel request for <b>${item.Item}</b>?</p>`, 
+                        'Yes, Reject', 
+                        () => {
+                            hideModal();
+                            // Sending { item: item } so backend can access data.item.Category etc.
+                            sendData('REJECT_INVENTORY_REQUEST', { item: item }).then(res => {
+                                if(res.success) {
+                                    pendingRequests.splice(index, 1);
+                                    renderInventoryRequests();
+                                    triggerNotification('Cancelled', res.message, 'info');
+                                } else {
+                                    showModal('Error', res.message, 'Close', hideModal, true);
+                                }
+                            });
+                        }, 
+                        false
+                    );
+                };
+
+                window.toggleFulfillButton = () => { 
+                    const cb = document.querySelectorAll('.req-checkbox:checked');
+                    const btn = document.getElementById('btn-fulfill-requests'); 
+                    if(cb.length > 0) {
+                        btn.disabled = false;
+                        btn.classList.remove('bg-gray-300','text-gray-500','cursor-not-allowed');
+                        btn.classList.add('bg-green-500','text-white','cursor-pointer');
+                    } else {
+                        btn.disabled = true;
+                        btn.classList.add('bg-gray-300','text-gray-500','cursor-not-allowed');
+                        btn.classList.remove('bg-green-500','text-white','cursor-pointer');
+                    }
+                };
+
+                window.handleFulfillRequests = () => {
+                    const cb = document.querySelectorAll('.req-checkbox:checked'); 
+                    if(cb.length === 0) return;
+                    const items = Array.from(cb).map(c => pendingRequests[parseInt(c.getAttribute('data-index'))]);
+                    const btn = document.getElementById('btn-fulfill-requests');
+                    const orig = btn.innerHTML; 
+                    btn.disabled = true; 
+                    btn.textContent = '...';
+                    
+                    sendData('FULFILL_INVENTORY_REQUESTS',{items}).then(res => { 
+                        if(res.success){ 
+                            pendingRequests = pendingRequests.filter(req => !items.some(f => f.Date === req.Date && f.Item === req.Item)); 
+                            renderInventoryRequests(); 
+                            showModal('Success', `<p class="text-green-600">${res.message}</p>`, 'OK', hideModal, true); 
+                        } else { 
+                            showModal('Error', res.message, 'Close', hideModal, true); 
+                        } 
+                    }).finally(() => {
+                        if(document.getElementById('btn-fulfill-requests')) {
+                            btn.disabled = false;
+                            btn.innerHTML = orig;
+                        }
+                    });
+                };
+
+                window.handleAddToInventory = () => { 
+                    const i = document.getElementById('inventory-item-select').value;
+                    const q = parseFloat(document.getElementById('inventory-qty-input').value) || 0; 
+                    if(!i || q <= 0) return; 
+                    const o = inventoryList.find(x => x.item === i); 
+                    inventoryStaged.push({ id: Date.now(), Type: currentInventoryType, Category: o?.category, Item: i, Unit: o?.unit, Qty: q }); 
+                    updateInventoryDisplay(); 
+                    document.getElementById('inventory-qty-input').value = 1; 
+                };
+
+                window.updateInventoryDisplay = () => { 
+                    const b = document.getElementById('inventory-summary-body'); 
+                    if(!b) return; 
+                    b.innerHTML = inventoryStaged.length === 0 ? `<tr><td colspan="5" class="text-center py-6 text-gray-400">Empty.</td></tr>` : inventoryStaged.map(r => `
+                        <tr class="border-b text-[10px] md:text-sm">
+                            <td class="px-1 py-1">${r.Category}</td>
+                            <td class="px-1 py-1">${r.Item}</td>
+                            <td class="px-1 py-1 text-right">${r.Qty}</td>
+                            <td class="px-1 py-1 text-right">${r.Unit}</td>
+                            <td class="px-1 py-1 text-center"><button onclick="removeInventoryItem(${r.id})" class="text-red-500"><i data-lucide="x" class="w-3 h-3"></i></button></td>
+                        </tr>`).join(''); 
+                    lucide.createIcons(); 
+                };
+
+                window.removeInventoryItem = (id) => { 
+                    inventoryStaged = inventoryStaged.filter(i => i.id !== id); 
+                    updateInventoryDisplay(); 
+                };
+
+                window.handleClearInventory = () => { 
+                    inventoryStaged = []; 
+                    updateInventoryDisplay(); 
+                };
+
+                window.handleSubmitInventory = () => { 
+                    if(inventoryStaged.length === 0) return; 
+                    const btn = document.getElementById('submit-inventory-btn');
+                    const orig = btn.innerHTML; 
+                    btn.disabled = true; 
+                    btn.textContent = 'Saving...'; 
+                    sendData('SAVE_INVENTORY', { transactions: inventoryStaged }).then(res => { 
+                        if(res.success) showModal('Success', `<p>${res.message}</p>`, 'OK', () => { inventoryStaged = []; updateInventoryDisplay(); hideModal(); }, true); 
+                    }).finally(() => { 
+                        btn.disabled = false; 
+                        btn.innerHTML = orig; 
+                        lucide.createIcons(); 
+                    }); 
+                };
+
+                document.getElementById('add-inventory-btn')?.addEventListener('click', handleAddToInventory);
+                
+                // Initialize default tab
+                if(document.getElementById('inv-tab-IN')) window.setInventoryTab('IN');
+            }
+
+            // --- MODULE LOGIC: ATTENDANCE ---
+            function initAttendanceModule() {
+                let matchedEmployee = null;
+                const sessionFullName = sessionStorage.getItem('takos_fullname'); // Get Full Name from login
+
+                // 1. Get Employee Data & Match using Full Name
+                fetchData('GET_EMPLOYEE_DATA').then(res => { 
+                    if(res.success) { 
+                        employeeList = res.data; 
+                        
+                        // Find employee where Full Name matches the logged-in Full Name
+                        if (sessionFullName) {
+                            matchedEmployee = employeeList.find(e => e.fullname.toLowerCase() === sessionFullName.toLowerCase());
+                        }
+                        
+                        const displayEl = document.getElementById('attendance-current-user');
+                        const avatarEl = document.getElementById('att-avatar');
+                        
+                        if (matchedEmployee) {
+                            // Display Nickname (Full Name)
+                            if(displayEl) displayEl.textContent = `${matchedEmployee.nickname} (${matchedEmployee.fullname})`;
+                            if(avatarEl) avatarEl.textContent = matchedEmployee.nickname.charAt(0).toUpperCase();
+                        } else {
+                            if(displayEl) displayEl.innerHTML = `<span class="text-red-500">Account Name "${sessionFullName}" not found in Attendance List</span>`;
+                            if(avatarEl) avatarEl.textContent = "?";
+                        }
+                    } 
+                });
+
+                // 2. Get Logs
+                fetchData('GET_ATTENDANCE_ACTIVITY').then(res => { 
+                    if(res.success) { 
+                        attendanceLogs = res.data; 
+                        updateAttendanceDisplay(); 
+                    } 
+                });
+
+                // 3. Toggle Logic
+                window.toggleAttendanceType = (type) => { 
+                    currentAttendanceType = type; 
+                    const inBtn = document.getElementById('btn-time-in');
+                    const outBtn = document.getElementById('btn-time-out');
+                    if(!inBtn || !outBtn) return;
+                    
+                    inBtn.className = type === 'TIME IN' 
+                        ? "flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-green-50 ring-4 ring-green-300 border-green-600 scale-105" 
+                        : "flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-green-50 opacity-70";
+                    
+                    outBtn.className = type === 'TIME OUT' 
+                        ? "flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-red-50 ring-4 ring-red-300 border-red-600 scale-105" 
+                        : "flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-red-50 opacity-70"; 
+                };
+
+                // 4. Submit Logic
+                window.submitAttendance = () => { 
+                    if (!matchedEmployee) {
+                        showModal('Error', '<p class="text-red-500">Your account Full Name does not match any Employee profile.</p>', 'OK', hideModal, true); 
+                        return;
+                    }
+
+                    // --- VALIDATION: Prevent Time Out if no Time In ---
+                    if (currentAttendanceType === 'TIME OUT') {
+                        // Filter logs for this specific Nickname
+                        const userLogs = attendanceLogs.filter(l => l.nickname === matchedEmployee.nickname);
+                        const lastLog = userLogs.length > 0 ? userLogs[0] : null;
+
+                        if (!lastLog || lastLog.type === 'TIME OUT') {
+                            showModal('Action Denied', '<p class="text-red-600 font-medium">You cannot <b>Time Out</b> because you haven\'t Timed In yet (or you are already Timed Out).</p>', 'OK', hideModal, true);
+                            return;
+                        }
+                    }
+
+                    const btn = document.querySelector('button[onclick="submitAttendance()"]');
+                    const orig = btn.innerHTML; 
+                    btn.disabled = true; 
+                    btn.textContent = '...'; 
+                    
+                    sendData('LOG_ATTENDANCE', { 
+                        nickname: matchedEmployee.nickname, 
+                        fullname: matchedEmployee.fullname, 
+                        type: currentAttendanceType 
+                    }).then(r => { 
+                        if (r.success) { 
+                            fetchData('GET_ATTENDANCE_ACTIVITY').then(res => { 
+                                if(res.success){ attendanceLogs = res.data; updateAttendanceDisplay(); }
+                            }); 
+                        } else { 
+                            showModal('Error', r.message, 'OK', hideModal, true); 
+                        } 
+                    }).finally(() => { 
+                        btn.disabled = false; 
+                        btn.innerHTML = orig; 
+                    }); 
+                };
+
+                window.updateAttendanceDisplay = () => { 
+                    const b = document.getElementById('attendance-log-body'); 
+                    if(!b) return; 
+                    if (attendanceLogs.length === 0) { b.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-400">No logs.</td></tr>`; return; }
+                    
+                    b.innerHTML = attendanceLogs.map(l => `
+                        <tr class="border-b hover:bg-gray-50 transition-colors">
+                            <td class="px-1 py-2 md:px-4 md:py-3 align-middle">
+                                <span class="px-1.5 py-0.5 md:px-2 md:py-1 rounded-full text-[9px] md:text-xs font-bold ${l.type === 'TIME IN' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}">
+                                    ${l.type}
+                                </span>
+                            </td>
+                            <td class="px-1 py-2 md:px-4 md:py-3 text-gray-600 font-medium text-[10px] md:text-sm truncate">${l.nickname}</td>
+                            
+                            <td class="px-1 py-2 md:px-4 md:py-3 text-gray-500 text-[9px] md:text-sm font-medium truncate max-w-[80px] md:max-w-none">
+                                ${l.fullname}
+                            </td>
+                            
+                            <td class="px-1 py-2 md:px-4 md:py-3 font-mono text-gray-700 font-bold text-[10px] md:text-sm truncate">${l.time}</td>
+                        </tr>`).join(''); 
+                };
+
+                window.toggleAttendanceType('TIME IN');
+                lucide.createIcons();
+            }
+
+            // --- MODULE LOGIC: REPORTS ---
+            
+            // 1. CONFIRM UPDATE
+            window.preCheckUpdateRecord = () => {
+                const modal = document.getElementById('confirm-update-modal');
+                if (!modal) { executeReportUpdate(); return; }
+
+                const d = window.currentReportData;
+                let exists = false;
+                if (d && d.financial && d.financial.calculations) {
+                    if (d.financial.calculations.buo > 0 || d.financial.calculations.mod > 0) exists = true;
+                }
+
+                const title = document.getElementById('confirm-title');
+                const msg = document.getElementById('confirm-message');
+                const header = document.getElementById('confirm-header-bg');
+                const btn = document.getElementById('confirm-yes-btn');
+                const icon = document.getElementById('confirm-icon');
+
+                if (exists) {
+                    title.textContent = "Overwrite Existing Record?";
+                    msg.innerHTML = "A record for <b>TODAY</b> already exists.<br>Continuing will <b>overwrite</b> the previous data.";
+                    header.className = "bg-orange-500 p-4 flex justify-center";
+                    btn.className = "px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-lg transition-colors";
+                    icon.setAttribute('data-lucide', 'alert-triangle');
+                } else {
+                    title.textContent = "Confirm Update";
+                    msg.textContent = "Are you sure you want to save these input values?";
+                    header.className = "bg-blue-600 p-4 flex justify-center";
+                    btn.className = "px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg transition-colors";
+                    icon.setAttribute('data-lucide', 'save');
+                }
+                lucide.createIcons();
+                modal.classList.remove('hidden');
+            };
+
+            // 2. EXECUTE UPDATE
+            window.executeReportUpdate = async () => {
+                document.getElementById('confirm-update-modal')?.classList.add('hidden');
+                const btn = document.getElementById('update-report-btn');
+                const orig = btn ? btn.innerHTML : 'Update'; 
+                if(btn) { btn.disabled = true; btn.textContent = 'Updating...'; }
+                
+                await sendData('UPDATE_REPORT_INPUTS', { 
+                    buo1: document.getElementById('input-buo1').value, 
+                    mod1: document.getElementById('input-mod1').value, 
+                    timpla1: document.getElementById('input-timpla1').value, 
+                    tira1: document.getElementById('input-tira1').value 
+                });
+                
+                await loadReportData();
+                if(btn) { btn.disabled = false; btn.innerHTML = orig; }
+                
+                ['input-buo1','input-mod1','input-timpla1','input-tira1'].forEach(id => { 
+                    const el = document.getElementById(id); if(el) el.value = ''; 
+                });
+                
+                triggerNotification('Success', 'Record updated successfully.', 'success');
+            };
+
+            // 3. VIEW SNAPSHOT (Reverted to Fullname)
+            window.viewReportSnapshot = () => {
+                if (!window.currentReportData) { 
+                    showModal('Error', 'No data loaded.', 'OK', hideModal, true); 
+                    return; 
+                }
+                const d = window.currentReportData;
+                
+                // BACK TO FULL NAME
+                const submitterName = sessionStorage.getItem('takos_fullname') || "User";
+                
+                populateSnapshotModal(d, submitterName);
+                document.getElementById('snapshot-modal').classList.remove('hidden');
+            };
+
+            // 4. CONFIRM SUBMIT
+            window.confirmSubmitReport = () => {
+                document.getElementById('confirm-submit-modal').classList.remove('hidden');
+            };
+
+            // 5. EXECUTE SUBMIT (Reverted to Fullname)
+            window.executeSubmitReport = () => {
+                document.getElementById('confirm-submit-modal').classList.add('hidden');
+                
+                if (!window.currentReportData) return;
+                const d = window.currentReportData;
+                
+                // BACK TO FULL NAME
+                const submitterName = sessionStorage.getItem('takos_fullname') || "User";
+
+                triggerNotification('Submitting...', 'Archiving daily report...', 'info');
+
+                sendData('SUBMIT_FULL_REPORT', { 
+                    buo: d.financial.calculations.buo,
+                    sales: d.financial.transactions.totalSales,
+                    expenses: d.financial.transactions.totalExpenses,
+                    discounts: d.financial.transactions.totalDiscounts,
+                    cash: d.financial.breakdown.cash,
+                    gcash: d.financial.breakdown.gcash,
+                    bpi: d.financial.breakdown.bpi,
+                    gotyme: d.financial.breakdown.gotyme,
+                    moneyIn: d.financial.calculations.moneyIn,
+                    moneyOut: d.financial.calculations.moneyOut,
+                    mod: d.financial.calculations.mod,
+                    discrepancy: d.financial.calculations.discrepancy,
+                    timpla: d.inventory.batter.timpla,
+                    tira: d.inventory.batter.tira,
+                    wastage: d.inventory.batter.ratio,
+                    submitter: submitterName 
+                }).then(res => {
+                    if(res.success) {
+                        triggerNotification('Report Saved', 'Daily report archived to database.', 'success');
+                    } else {
+                        triggerNotification('Save Failed', res.message, 'error');
+                    }
+                });
+            };
+
+            // Helper: Populates the snapshot modal
+            function populateSnapshotModal(d, submitterName) {
+                // Header
+                document.getElementById('snap-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' });
+                document.getElementById('snap-timestamp').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('snap-submitted-by').textContent = submitterName;
+
+                // Financial Summary
+                document.getElementById('snap-sales').textContent = formatCurrency(d.financial.transactions.totalSales);
+                document.getElementById('snap-expenses').textContent = formatCurrency(d.financial.transactions.totalExpenses);
+                document.getElementById('snap-discounts').textContent = formatCurrency(d.financial.transactions.totalDiscounts);
+
+                // Cash Flow
+                document.getElementById('snap-money-in').textContent = formatCurrency(d.financial.calculations.moneyIn);
+                document.getElementById('snap-money-out').textContent = formatCurrency(d.financial.calculations.moneyOut);
+                document.getElementById('snap-mod').textContent = formatCurrency(d.financial.calculations.mod);
+
+                // Payment Breakdown
+                document.getElementById('snap-cash').textContent = formatCurrency(d.financial.breakdown.cash);
+                document.getElementById('snap-gcash').textContent = formatCurrency(d.financial.breakdown.gcash);
+                document.getElementById('snap-bpi').textContent = formatCurrency(d.financial.breakdown.bpi);
+                document.getElementById('snap-gotyme').textContent = formatCurrency(d.financial.breakdown.gotyme);
+
+                // Results
+                document.getElementById('snap-buo').textContent = formatCurrency(d.financial.calculations.buo);
+                const discVal = d.financial.calculations.discrepancy;
+                const discEl = document.getElementById('snap-discrepancy');
+                discEl.textContent = formatCurrency(discVal);
+                if (discVal > 0) { discEl.className = 'font-mono font-bold text-sm text-red-400'; } 
+                else if (discVal < 0) { discEl.className = 'font-mono font-bold text-sm text-green-400'; } 
+                else { discEl.className = 'font-mono font-bold text-sm text-gray-500'; }
+
+                // Batter Stats
+                document.getElementById('snap-timpla').textContent = d.inventory.batter.timpla;
+                document.getElementById('snap-tira').textContent = `${d.inventory.batter.tira} mL`;
+                document.getElementById('snap-ratio').textContent = formatCurrency(d.inventory.batter.ratio);
+
+                // --- TABLE 1: DISCREPANCIES ---
+                const discBody = document.getElementById('snap-table-disc');
+                discBody.innerHTML = (d.inventory.discrepancies.length > 0) 
+                    ? d.inventory.discrepancies.map(r => `
+                        <tr class="border-b border-gray-50 last:border-0">
+                            <td class="pl-1 py-0.5 truncate text-gray-500">${r.category}</td>
+                            <td class="py-0.5 truncate font-medium text-gray-800">${r.item}</td>
+                            <td class="py-0.5 text-center text-gray-400">${r.unit}</td>
+                            <td class="py-0.5 text-right text-gray-500">${r.iuqty}</td>
+                            <td class="py-0.5 text-right text-gray-500">${r.uqty}</td>
+                            <td class="pr-1 py-0.5 text-right font-bold ${parseFloat(r.ou)<0?'text-red-500':'text-green-500'}">${r.ou}</td>
+                        </tr>`).join('')
+                    : '<tr><td colspan="6" class="text-center italic py-2 text-gray-400 text-[8px]">Match</td></tr>';
+
+                // --- TABLE 2: ADDED ---
+                const addedBody = document.getElementById('snap-table-added');
+                addedBody.innerHTML = (d.inventory.added && d.inventory.added.length > 0) 
+                    ? d.inventory.added.map(r => `
+                        <tr class="border-b border-gray-50 last:border-0">
+                            <td class="py-0.5 truncate text-gray-700 w-[70%]">${r.item}</td>
+                            <td class="py-0.5 text-right font-bold text-gray-900 w-[30%]">${r.qty}</td>
+                        </tr>`).join('') 
+                    : '<tr><td colspan="2" class="text-center italic py-1 text-gray-400 text-[8px]">-</td></tr>';
+
+                // --- TABLE 3: REQUESTED ---
+                const reqBody = document.getElementById('snap-table-requested');
+                reqBody.innerHTML = (d.inventory.requested && d.inventory.requested.length > 0) 
+                    ? d.inventory.requested.map(r => `
+                        <tr class="border-b border-gray-50 last:border-0">
+                            <td class="py-0.5 truncate text-gray-700 w-[70%]">${r.item}</td>
+                            <td class="py-0.5 text-right font-bold text-gray-900 w-[30%]">${r.qty}</td>
+                        </tr>`).join('') 
+                    : '<tr><td colspan="2" class="text-center italic py-1 text-gray-400 text-[8px]">-</td></tr>';
+
+                // --- TABLE 4: EXPENSES ---
+                const expBody = document.getElementById('snap-table-exp');
+                expBody.innerHTML = (d.expenses.length > 0) 
+                    ? d.expenses.map(r => `
+                        <tr class="border-b border-gray-50 last:border-0">
+                            <td class="py-0.5 truncate text-gray-700 w-[60%]">${r.Item}</td>
+                            <td class="py-0.5 text-right font-bold text-gray-900 w-[40%]">${formatCurrency(r.Amount)}</td>
+                        </tr>`).join('') 
+                    : '<tr><td colspan="2" class="text-center italic py-1 text-gray-400 text-[8px]">-</td></tr>';
+            }
+
+            // 7. LOAD DATA
+            async function loadReportData() {
+                const res = await fetchData('GET_REPORT_DATA'); 
+                if(!res.success) return; 
+                
+                window.currentReportData = res.data; 
+                const d = res.data;
+
+                document.getElementById('rep-sales').textContent=formatCurrency(d.financial.transactions.totalSales);
+                document.getElementById('rep-expenses').textContent=formatCurrency(d.financial.transactions.totalExpenses);
+                document.getElementById('rep-discounts').textContent=formatCurrency(d.financial.transactions.totalDiscounts);
+                document.getElementById('rep-cash').textContent=formatCurrency(d.financial.breakdown.cash);
+                document.getElementById('rep-gcash').textContent=formatCurrency(d.financial.breakdown.gcash);
+                document.getElementById('rep-bpi').textContent=formatCurrency(d.financial.breakdown.bpi);
+                document.getElementById('rep-gotyme').textContent=formatCurrency(d.financial.breakdown.gotyme);
+                document.getElementById('rep-money-in').textContent=formatCurrency(d.financial.calculations.moneyIn);
+                document.getElementById('rep-buo').textContent=formatCurrency(d.financial.calculations.buo);
+                document.getElementById('rep-money-out').textContent=formatCurrency(d.financial.calculations.moneyOut);
+                document.getElementById('rep-mod').textContent=formatCurrency(d.financial.calculations.mod);
+                
+                const discVal = d.financial.calculations.discrepancy;
+                const discEl = document.getElementById('rep-discrepancy');
+                discEl.textContent = formatCurrency(discVal);
+                discEl.className = discVal > 0 ? 'font-bold font-mono text-xl text-red-600' : 'font-bold font-mono text-xl text-green-600';
+
+                document.getElementById('rep-timpla').textContent=d.inventory.batter.timpla;
+                document.getElementById('rep-tira-inv').textContent=d.inventory.batter.tira;
+                document.getElementById('rep-ratio').textContent=formatCurrency(d.inventory.batter.ratio);
+                
+                renderTable('table-discrepancies',d.inventory.discrepancies,['category','item','unit','iuqty','uqty','ou']);
+                renderTable('table-added',d.inventory.added,['category','item','unit','qty']);
+                renderTable('table-requested',d.inventory.requested,['category','item','unit','qty']);
+                
+                const eB=document.getElementById('table-expenses-today');
+                if(eB) eB.innerHTML = (d.expenses&&d.expenses.length>0) ? d.expenses.map(e=>`<tr class="border-b text-xs"><td class="px-1 py-1">${e.Type}</td><td class="px-1 py-1">${e.Item}</td><td class="px-1 py-1 text-center">${e.Qty}</td><td class="px-1 py-1 text-right">${formatCurrency(e.Price)}</td><td class="px-1 py-1 text-right font-semibold">${formatCurrency(e.Amount)}</td></tr>`).join('') : '<tr><td colspan="5" class="text-center py-4 text-gray-400">No expenses.</td></tr>';
+            }
+
+            function renderTable(id, data, keys) { 
+                const b = document.getElementById(id); 
+                if(!b) return; 
+                b.innerHTML = (!data || data.length === 0) 
+                    ? `<tr><td colspan="${keys.length}" class="text-center py-4 text-gray-400">No data</td></tr>` 
+                    : data.map(r => `
+                        <tr class="border-b text-xs hover:bg-gray-50">
+                            ${keys.map((k,i) => {
+                                const alignClass = i === 2 ? 'text-center' : (i > 2 ? 'text-right' : 'text-left');
+                                const widthClass = i === 2 ? 'px-1' : 'px-2';
+                                return `<td class="${widthClass} py-2 ${alignClass} truncate">${r[k]}</td>`;
+                            }).join('')}
+                        </tr>`).join(''); 
+            }
+            
+            function initReportsModule() { 
+                window.updateReportInputs = preCheckUpdateRecord; 
+                window.preCheckUpdateRecord = preCheckUpdateRecord;
+                window.executeReportUpdate = executeReportUpdate;
+                window.viewReportSnapshot = viewReportSnapshot;     
+                window.confirmSubmitReport = confirmSubmitReport;   
+                window.executeSubmitReport = executeSubmitReport;   
+                loadReportData(); 
+            }
+
+            // --- INIT ---
+            updateDateDisplay();
+            loadModule('dashboard');
+            if (window.innerWidth >= 768) toggleSidebar(true);
+            toggleButton.addEventListener('click', () => toggleSidebar(!body.classList.contains('sidebar-is-open')));
+            overlay.addEventListener('click', () => toggleSidebar(false));
+            navLinks.forEach(link => link.addEventListener('click', (e) => { e.preventDefault(); loadModule(link.getAttribute('data-module')); }));
+            
+            window.showModal = (title, html, confirmText, confirmAction, hideCancel) => { 
+                document.getElementById('modal-title').textContent = title; 
+                document.getElementById('modal-body').innerHTML = html; 
+                const cBtn = document.getElementById('modal-confirm-button'); 
+                cBtn.textContent = confirmText; 
+                cBtn.onclick = confirmAction; 
+                document.getElementById('modal-cancel-button').classList.toggle('hidden', hideCancel); 
+                document.getElementById('custom-modal').classList.remove('hidden'); 
+            };
+            
+            window.hideModal = () => document.getElementById('custom-modal').classList.add('hidden');
+            document.getElementById('modal-close')?.addEventListener('click', hideModal);
+            document.getElementById('modal-cancel-button')?.addEventListener('click', hideModal);
+
+            // ============================================================
+            // CRITICAL FIX: EXPOSE FUNCTIONS TO WINDOW
+            // ============================================================
+            
+            // 1. Expose Main Navigation & UI Functions
+            window.triggerNotification = triggerNotification;
+            window.toggleNotifDropdown = toggleNotifDropdown; // Fixes Bell Click
+            window.loadModule = loadModule;                   // Fixes Dashboard Navigation
+            window.initDashboardModule = initDashboardModule;
+            window.showModal = showModal;
+            window.hideModal = hideModal;
+
+            // 2. Expose Report Functions (Defined in main scope)
+            window.updateReportInputs = updateReportInputs;
+            window.handleDailyReportSubmit = handleDailyReportSubmit;
+
+            // NOTE: Functions like 'renderPosGrid' or 'updateCartDisplay' are 
+            // already exposed to 'window' inside their specific init functions 
+            // (e.g., inside initPOSModule), so we do NOT need to list them here.
+            // Listing them here causes the "ReferenceError" crash.
+
+        }); // <--- END OF DOMContentLoaded
+        
+        // --- DYNAMIC CONTENT GENERATORS (HTML Strings) ---
+        const Card = (icon, title, value, color) => `<div class="p-6 bg-white rounded-xl shadow-lg border-l-4 border-${color}-500 hover:shadow-xl transition-shadow"><div class="flex justify-between items-center"><div><p class="text-sm font-medium text-gray-500">${title}</p><p class="text-3xl font-bold text-gray-900">${value}</p></div><i data-lucide="${icon}" class="w-8 h-8 text-${color}-500 opacity-70"></i></div></div>`;
+        const generateDashboardContent = () => `<div class="mb-8"><h2 class="text-2xl font-bold mb-4 text-gray-900 flex items-center"><i data-lucide="chef-hat" class="w-6 h-6 mr-2 text-primary"></i> Active Orders</h2><div id="orders-active-container"><div class="bg-white p-6 rounded-xl shadow-lg flex items-center justify-center text-gray-500">Loading orders...</div></div></div><div class="mb-8"><div class="bg-white rounded-xl shadow-lg overflow-hidden"><div class="bg-gray-50 px-6 py-4 border-b border-gray-200"><h2 class="text-xl font-bold text-gray-800 flex items-center"><i data-lucide="check-circle" class="w-5 h-5 mr-2 text-green-600"></i> Completed Orders</h2></div><div class="overflow-x-auto w-full mx-auto max-h-[300px] overflow-y-auto"><table class="w-full text-[10px] md:text-sm text-left"> <thead class="bg-gray-100 text-gray-600 font-medium border-b sticky top-0 z-10"><tr><th class="py-1 px-0.5 md:py-3 md:px-4">Order#</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Customer</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Item</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">Qty</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Amt</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Sub</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Disc</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Total</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">MOP</th></tr></thead><tbody id="orders-completed-body" class="divide-y divide-gray-100"><tr><td colspan="9" class="p-4 text-center text-gray-500">Loading...</td></tr></tbody></table></div></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-primary border-b pb-2">Transactions</h2><div class="space-y-4">${Card('dollar-sign', 'Total Sales', '<span id="dash-total-sales">Loading...</span>', 'primary')} ${Card('trending-down', 'Total Expenses', '<span id="dash-total-expenses">Loading...</span>', 'red')} ${Card('tag', 'Total Discounts', '<span id="dash-total-discounts">Loading...</span>', 'yellow')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Payment Breakdown</h2><div class="space-y-4">${Card('wallet', 'Cash', '<span id="dash-cash">Loading...</span>', 'green')} ${Card('smartphone', 'Gcash', '<span id="dash-gcash">Loading...</span>', 'blue')} ${Card('credit-card', 'BPI', '<span id="dash-bpi">Loading...</span>', 'red')} ${Card('zap', 'GoTyme', '<span id="dash-gotyme">Loading...</span>', 'cyan')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Order Metrics</h2><div class="space-y-4">${Card('scale', 'AOV', '<span id="dash-aov">Loading...</span>', 'blue')} ${Card('package', 'Number of Orders', '<span id="dash-orders">Loading...</span>', 'indigo')}</div></div></div><div class="grid grid-cols-1 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Inventory Movement</h2><div class="overflow-x-auto w-full mx-auto"><table class="w-full text-[10px] md:text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-medium border-b"><tr><th class="py-2 px-1 md:py-3 md:px-4">Type</th><th class="py-2 px-1 md:py-3 md:px-4">Category</th><th class="py-2 px-1 md:py-3 md:px-4">Item</th><th class="py-2 px-1 md:py-3 md:px-4 text-center">Unit</th><th class="py-2 px-1 md:py-3 md:px-4 text-right">Qty</th></tr></thead><tbody id="inventory-movement-table-body" class="divide-y divide-gray-100"><tr><td colspan="5" class="p-4 text-center text-gray-500">Loading movement...</td></tr></tbody></table></div></div></div>`;
+        const generatePOSContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col h-full"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2">Select Item</h2><div class="mb-4 flex flex-col md:flex-row gap-4 items-stretch md:items-center bg-gray-50 p-3 rounded-lg border"><div class="flex items-center justify-center md:justify-start w-full md:w-auto"><label class="font-medium text-gray-700 mr-3 hidden md:block">Qty:</label><button onclick="handleQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-l-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="minus" class="w-5 h-5 text-gray-700"></i></button><input type="number" id="item-qty-input" value="1" class="w-20 text-center h-12 border-y border-gray-300 font-bold text-xl focus:outline-none text-gray-800"><button onclick="handleQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-r-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="plus" class="w-5 h-5 text-gray-700"></i></button></div><button id="pos-add-btn" onclick="addSelectedToCart()" disabled class="flex-grow bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all flex items-center justify-center transform active:scale-95 text-lg"><i data-lucide="shopping-cart" class="w-6 h-6 mr-2"></i> ADD TO CART</button></div><div id="pos-grid-container" class="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 overflow-y-auto max-h-[60vh] pr-1 pb-2"><div class="col-span-full text-center text-gray-400 py-10">Loading items...</div></div></div></div><div class="lg:col-span-1 flex flex-col space-y-4"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col min-h-[400px]"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Cart</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-gray-500 uppercase"><tr><th class="px-2 py-3 text-left">Item</th><th class="px-1 py-3 text-center">Qty</th><th class="px-2 py-3 text-right">Total</th><th class="w-6"></th></tr></thead><tbody id="cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Checkout</h2><div class="space-y-3"><div class="flex justify-between text-lg font-medium"><span class="text-gray-600">Subtotal:</span><span id="subtotal-display" class="font-bold">₱0.00</span></div><div class="flex justify-between items-center"><label class="text-sm font-medium text-gray-700">Discount:</label><input type="number" id="discount-input" value="0.00" class="w-24 p-1 border rounded text-right font-semibold text-primary focus:ring-primary focus:border-primary"></div><div class="flex justify-between text-2xl font-bold font-title text-primary pt-2 border-t border-dashed border-gray-300"><span>TOTAL:</span><span id="total-display">₱0.00</span></div></div><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label><div class="relative"><select id="mop-select" class="block w-full p-2.5 border border-gray-300 rounded-lg appearance-none bg-gray-50 focus:bg-white font-medium"><option>Cash</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Customer (Optional)</label><input type="text" id="customer-name-input" class="block w-full p-2.5 border border-gray-300 rounded-lg" placeholder="Name"></div></div><div class="grid grid-cols-2 gap-3 pt-2"><button onclick="clearOrder()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="checkout-button" onclick="checkoutOrder()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
+        const generateExpensesContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2 flex items-center"><i data-lucide="wallet" class="w-5 h-5 mr-2"></i> Record Expense</h2><div class="grid grid-cols-2 md:grid-cols-5 gap-4 items-end"><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Type</label><div class="relative h-12"><select id="expense-type-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white"><option>Loading...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Item</label><input type="text" id="expense-item-input" class="block w-full h-12 px-3 border rounded-lg"></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleExpenseQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="expense-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleExpenseQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Price</label><input type="number" id="expense-price-input" class="block w-full h-12 px-3 border rounded-lg text-right"></div><div class="col-span-2 md:col-span-1"><button id="add-to-expense-cart-button" class="w-full h-12 bg-expense text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus-circle" class="w-5 h-5 mr-2"></i> Add</button></div></div></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Expense List</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 text-[10px] md:text-sm text-gray-600 font-semibold"><tr><th class="px-1 py-2 md:px-2 md:py-3 text-left">Type</th><th class="px-1 py-2 md:px-2 md:py-3 text-left">Item</th><th class="px-1 py-2 md:px-2 md:py-3 text-center">Qty</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Price</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Amt</th><th class="px-1 py-2 md:px-2 md:py-3"></th></tr></thead><tbody id="expense-cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="lg:col-span-1 bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Summary</h2><div class="flex justify-between text-2xl font-bold font-title text-expense pt-2"><span>TOTAL:</span><span id="expense-total-display">₱0.00</span></div><div class="grid grid-cols-2 gap-3 pt-4"><button onclick="handleClearExpenseCart()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="add-expense-button" onclick="handleAddExpense()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div>`;
+        const generateInventoryContent = () => `<div class="space-y-6"><div class="space-y-6"><div><h3 class="text-xl font-title font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="clock-4" class="w-6 h-6 mr-2 text-yellow-500"></i> Pending REQ</h3><div id="inventory-requests-container"><div class="bg-white p-6 rounded-xl shadow-lg text-center text-gray-500">Loading requests...</div></div></div></div><div class="bg-white rounded-xl shadow-lg overflow-hidden space-y-6"><div class="flex items-end bg-gray-100 border-b border-gray-200 px-4 pt-2 space-x-1"><button id="inv-tab-IN" onclick="setInventoryTab('IN')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-blue-500 bg-white text-blue-700">IN</button><button id="inv-tab-OUT" onclick="setInventoryTab('OUT')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">OUT</button><button id="inv-tab-REJ" onclick="setInventoryTab('REJ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REJ</button><button id="inv-tab-REQ" onclick="setInventoryTab('REQ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REQ</button></div><div class="p-6 space-y-6"><div class="border-b pb-6"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 flex items-center"><i data-lucide="package-plus" class="w-5 h-5 mr-2"></i> Transaction</h2><div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1">Category</label><div class="relative h-12"><select id="inventory-category-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><option value="" disabled selected>Select...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-2"><label class="block text-sm font-medium mb-1">Item</label><div class="relative h-12"><select id="inventory-item-select" disabled class="block w-full h-full px-3 border rounded-lg appearance-none bg-gray-50 text-gray-500 disabled:cursor-not-allowed"><option value="" disabled selected>Select Category First</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleInventoryQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="inventory-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleInventoryQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-5 md:col-span-1"><button id="add-inventory-btn" class="w-full h-12 bg-inventory text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add</button></div></div></div><div><h2 class="text-xl font-title font-semibold mb-4 text-gray-800">Summary</h2><div class="overflow-x-auto rounded-lg border border-gray-200 max-h-[40vh] w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Category</th><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Item</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Qty</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Unit</th><th class="px-1 py-2 md:px-4 md:py-3"></th></tr></thead><tbody id="inventory-summary-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="flex justify-end space-x-4 pt-4 border-t"><button onclick="handleClearInventory()" class="bg-red-100 text-red-600 hover:bg-red-200 px-6 py-3 rounded-lg font-bold shadow-sm flex items-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-2"></i> Clear</button><button onclick="handleSubmitInventory()" id="submit-inventory-btn" class="bg-primary hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold shadow-xl flex items-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
+        const generateAttendanceContent = () => `
+        <div class="max-w-4xl mx-auto space-y-6 md:space-y-8">
+            <div class="bg-white p-4 md:p-8 rounded-xl shadow-2xl border-t-8 border-attendance">
+                <h2 class="text-xl md:text-2xl font-title font-bold text-center text-gray-800 mb-6 md:mb-8">Staff Attendance Log</h2>
+                
+                <div class="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8">
+                    
+                    <div class="w-full md:w-1/2">
+                        <label class="block text-sm font-bold text-gray-600 mb-2">Employee</label>
+                        <div class="p-4 border-2 border-gray-100 rounded-xl bg-gray-50 text-lg font-bold text-gray-800 flex items-center shadow-inner">
+                            <div class="w-10 h-10 min-w-[2.5rem] rounded-full bg-attendance text-white flex items-center justify-center font-bold mr-3" id="att-avatar">?</div>
+                            <span id="attendance-current-user" class="truncate">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-4">
+                        <button id="btn-time-in" onclick="toggleAttendanceType('TIME IN')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-green-50">
+                            <i data-lucide="sun" class="w-8 h-8 text-green-600 mb-1"></i>
+                            <span class="text-xs font-bold text-green-700">TIME IN</span>
+                        </button>
+                        <button id="btn-time-out" onclick="toggleAttendanceType('TIME OUT')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 border-gray-200 opacity-70 transition-all duration-200 bg-white hover:bg-red-50">
+                            <i data-lucide="moon" class="w-8 h-8 text-red-600 mb-1"></i>
+                            <span class="text-xs font-bold text-red-700">TIME OUT</span>
+                        </button>
+                    </div>
+
+                    <div class="w-full md:w-auto">
+                        <button onclick="submitAttendance()" class="w-full md:w-32 h-16 bg-attendance text-white font-bold text-xl rounded-xl shadow-lg hover:bg-blue-600 transform transition hover:-translate-y-1 active:translate-y-0">
+                            ENTER
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-bold text-gray-700 flex items-center">
+                        <i data-lucide="history" class="w-5 h-5 mr-2 text-attendance"></i> Recent Activity
+                    </h3>
+                </div>
+                <div class="overflow-x-auto w-full mx-auto">
+                    <table class="min-w-full table-fixed">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Type</th>
+                                <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Nick</th>
+                                <th class="w-[35%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Full Name</th>
+                                <th class="w-[25%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-log-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+        const generateReportsContent = () => `
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+                        <div class="text-xs text-gray-500 font-bold uppercase">Total Sales</div>
+                        <div class="text-xl font-bold text-gray-800 mt-1" id="rep-sales">0.00</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+                        <div class="text-xs text-gray-500 font-bold uppercase">Total Expenses</div>
+                        <div class="text-xl font-bold text-red-600 mt-1" id="rep-expenses">0.00</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+                        <div class="text-xs text-gray-500 font-bold uppercase">Discounts</div>
+                        <div class="text-xl font-bold text-gray-800 mt-1" id="rep-discounts">0.00</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+                        <div class="text-xs text-gray-500 font-bold uppercase">Cash Count (BUO)</div>
+                        <div class="text-xl font-bold text-green-700 mt-1" id="rep-buo">0.00</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                            <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="edit-3" class="w-4 h-4 mr-2"></i> Daily Inputs</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-bold text-gray-500">BUO (Cash Count)</label>
+                                    <input type="number" id="input-buo1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-gray-500">MOD (Marked Bills)</label>
+                                    <input type="number" id="input-mod1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-bold text-gray-500">TIMPLA</label>
+                                        <input type="number" id="input-timpla1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-bold text-gray-500">TIRA</label>
+                                        <input type="number" id="input-tira1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+                                    </div>
+                                </div>
+                                <button id="update-report-btn" onclick="preCheckUpdateRecord()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow mt-2 transition-all">Update Record</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Cash Flow</h3>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between border-b border-dashed pb-1"><span>Money In</span><span class="font-mono" id="rep-money-in">0.00</span></div>
+                                <div class="flex justify-between border-b border-dashed pb-1"><span>Money Out</span><span class="font-mono text-red-500" id="rep-money-out">0.00</span></div>
+                                <div class="flex justify-between border-b border-dashed pb-1"><span>MOD</span><span class="font-mono" id="rep-mod">0.00</span></div>
+                                <div class="flex justify-between pt-2"><span class="font-bold">Discrepancy</span><span class="font-bold font-mono text-lg" id="rep-discrepancy">0.00</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm h-full flex flex-col">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold text-gray-800 flex items-center"><i data-lucide="package-search" class="w-4 h-4 mr-2"></i> Inventory Reconciliation</h3>
+                                <div class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium">Wastage: <span id="rep-ratio" class="font-bold text-red-600">0.00</span></div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div class="bg-orange-50 p-3 rounded-lg text-center"><div class="text-xs text-orange-600 uppercase font-bold">Timpla</div><div class="text-lg font-bold text-orange-900" id="rep-timpla">0</div></div>
+                                <div class="bg-blue-50 p-3 rounded-lg text-center"><div class="text-xs text-blue-600 uppercase font-bold">Tira</div><div class="text-lg font-bold text-blue-900" id="rep-tira-inv">0</div></div>
+                            </div>
+
+                            <div class="space-y-4 flex-grow">
+                                <div>
+                                    <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">Inventory Discrepancies</h4>
+                                    <div class="overflow-x-auto border rounded-lg">
+                                        <table class="w-full text-sm text-left table-fixed">
+                                            <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200">
+                                                <tr>
+                                                    <th class="px-2 py-2 w-[20%]">Category</th>
+                                                    <th class="px-2 py-2 w-[25%]">Item</th>
+                                                    <th class="px-2 py-2 w-[10%] text-center">Unit</th>
+                                                    <th class="px-2 py-2 w-[15%] text-right">IUQTY</th>
+                                                    <th class="px-2 py-2 w-[15%] text-right">UQTY</th>
+                                                    <th class="px-2 py-2 w-[15%] text-right">OU%</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="table-discrepancies" class="divide-y divide-gray-100"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h4 class="text-xs font-bold text-blue-500 uppercase mb-2">Added Inventories</h4>
+                                        <div class="overflow-x-auto border rounded-lg max-h-48">
+                                            <table class="w-full text-sm text-left table-fixed">
+                                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
+                                                    <tr>
+                                                        <th class="px-2 py-1 w-[30%]">Category</th>
+                                                        <th class="px-2 py-1 w-[35%]">Item</th>
+                                                        <th class="px-2 py-1 w-[15%] text-center">Unit</th>
+                                                        <th class="px-2 py-1 w-[20%] text-right">Qty</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="table-added" class="divide-y divide-gray-100"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 class="text-xs font-bold text-yellow-600 uppercase mb-2">Requested Inventories</h4>
+                                        <div class="overflow-x-auto border rounded-lg max-h-48">
+                                            <table class="w-full text-sm text-left table-fixed">
+                                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
+                                                    <tr>
+                                                        <th class="px-2 py-1 w-[30%]">Category</th>
+                                                        <th class="px-2 py-1 w-[35%]">Item</th>
+                                                        <th class="px-2 py-1 w-[15%] text-center">Unit</th>
+                                                        <th class="px-2 py-1 w-[20%] text-right">Qty</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="table-requested" class="divide-y divide-gray-100"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Payment Methods</h3>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="flex justify-between border-b pb-1"><span>Cash</span><span class="font-bold" id="rep-cash">0.00</span></div>
+                            <div class="flex justify-between border-b pb-1"><span>GCash</span><span class="font-bold text-blue-600" id="rep-gcash">0.00</span></div>
+                            <div class="flex justify-between border-b pb-1"><span>BPI</span><span class="font-bold text-red-600" id="rep-bpi">0.00</span></div>
+                            <div class="flex justify-between border-b pb-1"><span>GoTyme</span><span class="font-bold text-cyan-600" id="rep-gotyme">0.00</span></div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm">
+                        <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Expenses Today</h3>
+                        <div class="overflow-x-auto max-h-40 border rounded-lg">
+                            <table class="w-full text-sm text-left"><thead class="bg-gray-50 text-xs uppercase sticky top-0"><tr><th class="px-2 py-1">Type</th><th class="px-2 py-1">Item</th><th class="px-2 py-1 text-center">Qty</th><th class="px-2 py-1 text-right">Price</th><th class="px-2 py-1 text-right">Amt</th></tr></thead><tbody id="table-expenses-today" class="divide-y divide-gray-100"></tbody></table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                    <button onclick="viewReportSnapshot()" class="flex items-center px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors shadow-sm">
+                        <i data-lucide="eye" class="w-5 h-5 mr-2"></i> View Snapshot
+                    </button>
+                    <button onclick="confirmSubmitReport()" class="flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105">
+                        <i data-lucide="send" class="w-5 h-5 mr-2"></i> Submit Final Report
+                    </button>
+                </div>
+            </div>`;
+    </script>
+    <div id="snapshot-modal" class="hidden fixed inset-0 z-[100] bg-gray-900/90 flex justify-center p-4 backdrop-blur-sm overflow-y-auto">
+        <button onclick="document.getElementById('snapshot-modal').classList.add('hidden')" class="fixed top-2 right-2 text-white bg-black/20 rounded-full p-2 hover:bg-black/40 z-[102] transition-colors">
+            <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+
+        <div id="report-snapshot-content" class="bg-gray-100 shadow-2xl rounded-sm w-full max-w-[148mm] min-h-[210mm] relative font-sans text-gray-800 my-auto mx-auto border border-gray-300 flex flex-col">
+            
+            <div class="bg-white border-b-2 border-gray-800 p-3 flex justify-between items-start">
+                <div class="flex-1">
+                    <h1 class="text-xl font-black font-title tracking-tight text-gray-900 uppercase leading-none">TARATAKO</h1>
+                    <h2 class="text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-none mt-1">SANDOVAL</h2>
+                    <div class="flex flex-col mt-1.5 text-[8px] text-gray-500 font-mono leading-tight">
+                        <span><b class="text-gray-700 sans-serif">DATE:</b> <span id="snap-date">--</span></span>
+                        <span><b class="text-gray-700 sans-serif">TIME:</b> <span id="snap-timestamp">--</span></span>
+                    </div>
+                </div>
+                <div class="text-right w-1/2 pl-2">
+                    <p class="uppercase text-gray-400 font-bold text-[7px] tracking-wider mb-0.5">Submitted By</p>
+                    <p class="font-bold text-gray-900 text-[10px] bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200 inline-block text-right break-words leading-tight" id="snap-submitted-by">--</p>
+                </div>
+            </div>
+
+            <div class="p-3 flex-grow flex flex-col gap-2">
+                
+                <div class="bg-white rounded border border-gray-200 shadow-sm p-2">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="text-[8px] font-bold text-gray-400 uppercase block">Total Sales</span>
+                            <span class="text-xl font-black text-gray-900 leading-none" id="snap-sales">0.00</span>
+                        </div>
+                        <div class="text-right flex gap-3">
+                            <div>
+                                <span class="text-[8px] text-gray-400 uppercase block">Expenses</span>
+                                <span class="font-bold text-red-600 text-xs" id="snap-expenses">0.00</span>
+                            </div>
+                            <div>
+                                <span class="text-[8px] text-gray-400 uppercase block">Discounts</span>
+                                <span class="font-bold text-gray-700 text-xs" id="snap-discounts">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-white rounded border border-gray-200 shadow-sm p-1.5 flex flex-col justify-center">
+                        <h4 class="text-[8px] font-bold text-gray-400 uppercase text-center mb-0.5 border-b border-gray-100 pb-0.5">Cash Flow</h4>
+                        <div class="space-y-0.5">
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-gray-500">IN</span><span class="font-bold" id="snap-money-in">0</span></div>
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-gray-500">OUT</span><span class="font-bold text-red-600" id="snap-money-out">0</span></div>
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-gray-500">MOD</span><span class="font-bold text-blue-600" id="snap-mod">0</span></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded border border-gray-200 shadow-sm p-1.5 flex flex-col justify-center">
+                        <h4 class="text-[8px] font-bold text-gray-400 uppercase text-center mb-0.5 border-b border-gray-100 pb-0.5">Details</h4>
+                        <div class="space-y-0.5">
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-gray-400">CASH</span><span class="font-bold text-gray-900" id="snap-cash">0</span></div>
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-blue-400">GCASH</span><span class="font-bold" id="snap-gcash">0</span></div>
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-red-400">BPI</span><span class="font-bold" id="snap-bpi">0</span></div>
+                            <div class="flex justify-between items-center text-[9px]"><span class="font-bold text-cyan-600">GOTYME</span><span class="font-bold" id="snap-gotyme">0</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 text-white p-2 rounded shadow-md flex justify-between items-center">
+                    <div class="flex flex-col">
+                        <span class="text-[8px] uppercase tracking-widest text-gray-400">Final Discrepancy</span>
+                        <span class="font-mono font-bold text-sm" id="snap-discrepancy">0.00</span>
+                    </div>
+                    <div class="text-right border-l border-gray-600 pl-3">
+                        <span class="text-[8px] uppercase tracking-widest text-gray-400 block">Actual Cash (BUO)</span>
+                        <span class="font-bold text-lg leading-none" id="snap-buo">0.00</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded border border-gray-200 shadow-sm p-1.5">
+                    <div class="flex divide-x divide-gray-200 text-center">
+                        <div class="flex-1"><span class="block text-[7px] uppercase text-gray-400 font-bold">Timpla</span><span class="font-bold text-xs" id="snap-timpla">0</span></div>
+                        <div class="flex-1"><span class="block text-[7px] uppercase text-gray-400 font-bold">Tira</span><span class="font-bold text-xs" id="snap-tira">0</span></div>
+                        <div class="flex-1 bg-red-50 rounded-r"><span class="block text-[7px] uppercase text-red-400 font-bold">Wastage</span><span class="font-bold text-xs text-red-600" id="snap-ratio">0.00</span></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded border border-gray-200 shadow-sm flex-grow p-2 flex flex-col gap-2">
+                    <h3 class="text-[9px] font-bold text-gray-400 uppercase tracking-wider flex items-center border-b border-gray-100 pb-1">
+                        <i data-lucide="package" class="w-3 h-3 mr-1"></i> Inventory
+                    </h3>
+                    
+                    <div>
+                        <div class="text-[8px] font-bold text-gray-800 uppercase border-b border-gray-300 mb-0.5">Discrepancies</div>
+                        <table class="w-full text-[8px] text-left table-fixed">
+                            <thead class="text-gray-400 font-normal bg-gray-50">
+                                <tr>
+                                    <th class="w-[20%] pl-1">Cat</th>
+                                    <th class="w-[30%]">Item</th>
+                                    <th class="w-[10%] text-center">Unit</th>
+                                    <th class="w-[13%] text-right">IU</th>
+                                    <th class="w-[13%] text-right">UQ</th>
+                                    <th class="w-[14%] text-right pr-1">OU%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="snap-table-disc" class="divide-y divide-gray-50"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="border-r border-gray-100 pr-1">
+                            <h4 class="text-[7px] font-bold text-blue-600 uppercase mb-0.5">Added</h4>
+                            <table class="w-full text-[7px] text-left table-fixed">
+                                <thead class="text-gray-300"><tr><th class="w-[70%]">Item</th><th class="w-[30%] text-right">Qty</th></tr></thead>
+                                <tbody id="snap-table-added"></tbody>
+                            </table>
+                        </div>
+                        <div class="border-r border-gray-100 pr-1">
+                            <h4 class="text-[7px] font-bold text-yellow-600 uppercase mb-0.5">Requests</h4>
+                            <table class="w-full text-[7px] text-left table-fixed">
+                                <thead class="text-gray-300"><tr><th class="w-[70%]">Item</th><th class="w-[30%] text-right">Qty</th></tr></thead>
+                                <tbody id="snap-table-requested"></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 class="text-[7px] font-bold text-gray-600 uppercase mb-0.5">Expenses</h4>
+                            <table class="w-full text-[7px] text-left table-fixed">
+                                <thead class="text-gray-300"><tr><th class="w-[60%]">Item</th><th class="w-[40%] text-right">Amt</th></tr></thead>
+                                <tbody id="snap-table-exp"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-100 border-t border-gray-200 p-1.5 text-center">
+                <p class="text-[7px] text-gray-400 uppercase tracking-wider">Verified & Archived</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-update-modal" class="hidden fixed inset-0 z-[110] bg-gray-900/80 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div id="confirm-header-bg" class="bg-blue-600 p-4 flex justify-center">
+                <div class="bg-white/20 p-3 rounded-full">
+                    <i id="confirm-icon" data-lucide="save" class="w-8 h-8 text-white"></i>
+                </div>
+            </div>
+            
+            <div class="p-6 text-center">
+                <h3 id="confirm-title" class="text-xl font-bold text-gray-900 mb-2">Confirm Update</h3>
+                <p id="confirm-message" class="text-sm text-gray-500 mb-6">
+                    Are you sure you want to save these record inputs?
+                </p>
+                
+                <div class="flex gap-3 justify-center">
+                    <button onclick="document.getElementById('confirm-update-modal').classList.add('hidden')" class="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">
+                        Cancel
+                    </button>
+                    <button onclick="executeReportUpdate()" id="confirm-yes-btn" class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg transition-colors flex items-center">
+                        Yes, Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-submit-modal" class="hidden fixed inset-0 z-[110] bg-gray-900/80 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div class="bg-green-600 p-4 flex justify-center">
+                <div class="bg-white/20 p-3 rounded-full">
+                    <i data-lucide="send" class="w-8 h-8 text-white"></i>
+                </div>
+            </div>
+            <div class="p-6 text-center">
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Submit Final Report?</h3>
+                <p class="text-sm text-gray-500 mb-6">
+                    This will archive all sales, expenses, and inventory data for the day. <br><br>
+                    <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Ensure "Update Record" has been clicked first!</span>
+                </p>
+                <div class="flex gap-3 justify-center">
+                    <button onclick="document.getElementById('confirm-submit-modal').classList.add('hidden')" class="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">Cancel</button>
+                    <button onclick="executeSubmitReport()" class="px-5 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg transition-colors flex items-center">Yes, Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
+
+
+
