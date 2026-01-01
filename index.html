@@ -10,7 +10,7 @@
 
     <title>TakOS Sandoval</title>
 
-    <link rel="apple-touch-icon" href="https://saltystein.github.io/takos-sandoval/icon-sandoval.png">
+    <link rel="apple-touch-icon" href="https://saltystein.github.io/takos-sandoval/apple-icon.png">
 
     <link rel="icon" type="image/png" href="https://saltystein.github.io/takos-sandoval/favicon.png">
 
@@ -267,7 +267,7 @@
 // --- GITHUB TO GOOGLE SHEETS BRIDGE ---
         
         // 🔴 PASTE YOUR DEPLOYED WEB APP URL HERE
-        const API_URL = "https://script.google.com/macros/s/AKfycbyqqgvextxbwIlRPI4PoT3iBgynK00NVnL69K9hndfoXp_UkAjfahyqEdG7TPgjf1pp/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbzbR7B3t9G2JoirKJ8s14ZvUMwVeDpjvNlpLbeQ1X1IjPsHkNDCjXNleSwFaq9JE7mW/exec";
 
         async function apiRequest(action, params = {}) {
             // Using POST helps avoid size limits of URL parameters
@@ -380,10 +380,8 @@
                     
                     if (res.success) {
                         // CRITICAL FIX: Save the Full Name returned by the server check
-                        if (res.fullName) {
-                            sessionStorage.setItem('takos_fullname', res.fullName);
-                        }
-                        
+                        if (res.fullName) sessionStorage.setItem('takos_fullname', res.fullName);
+                        if (res.tier) sessionStorage.setItem('takos_tier', res.tier);
                         initializeSession(storedUser);
                         
                         // Fade out login screen
@@ -428,7 +426,8 @@
                 if (res.success) {
                     // STORE BOTH USERNAME AND FULL NAME
                     sessionStorage.setItem('takos_user', u);
-                    sessionStorage.setItem('takos_fullname', res.fullName); 
+                    sessionStorage.setItem('takos_fullname', res.fullName);
+                    sessionStorage.setItem('takos_tier', res.tier);
                     
                     initializeSession(u);
                     document.getElementById('login-screen').classList.add('hidden');
@@ -668,10 +667,12 @@
                 lucide.createIcons(); 
             }
             
-            // --- MODULE LOGIC: DASHBOARD ---
+// --- MODULE LOGIC: DASHBOARD ---
             async function initDashboardModule(isRefresh = false) {
                 try {
                     const response = await fetchData('GET_DASHBOARD_DATA');
+                    
+                    // Auto-refresh every 15 seconds
                     if (!syncInterval) { syncInterval = setInterval(() => initDashboardModule(true), 15000); }
 
                     if (response.success && response.data) {
@@ -690,22 +691,29 @@
                         
                         const activeOrdersList = response.data.activeOrders || [];
                         const completedOrdersList = response.data.completedOrders || [];
+                        const inventoryList = response.data.inventoryMovement || [];
+
                         const activeContainer = document.getElementById('orders-active-container');
                         const completedContainer = document.getElementById('orders-completed-body');
+                        const inventoryContainer = document.getElementById('inventory-movement-table-body');
                         
                         if(activeContainer && completedContainer) {
+                            // Clear containers before re-rendering
                             activeContainer.innerHTML = '';
                             completedContainer.innerHTML = '';
                             currentGroupedOrders = {}; 
 
+                            // --- 1. RENDER ACTIVE ORDERS ---
                             if (activeOrdersList.length === 0) {
                                 activeContainer.innerHTML = `<div class="p-6 text-center text-gray-500 bg-white rounded-lg shadow-sm col-span-3">No active orders.</div>`;
                             } else {
                                 const groupedActive = {};
                                 activeOrdersList.forEach(o => {
                                     if(!groupedActive[o.OrderNo]) {
+                                        // TIMER LOGIC: Calculate absolute start time based on server elapsed time
                                         const elapsed = o.Elapsed || 0; 
                                         const startTime = Date.now() - elapsed;
+                                        
                                         groupedActive[o.OrderNo] = {
                                             OrderNo: o.OrderNo,
                                             Customer: o.Customer,
@@ -716,6 +724,7 @@
                                             StartTime: startTime, 
                                             PaidStatus: o.PaidStatus,
                                             ReadyStatus: o.ReadyStatus,
+                                            Remarks: o.Remarks || "",
                                             Items: []
                                         };
                                         currentGroupedOrders[o.OrderNo] = groupedActive[o.OrderNo];
@@ -724,30 +733,64 @@
                                     if (o.Total) groupedActive[o.OrderNo].Total = o.Total;
                                     if (o.Discount) groupedActive[o.OrderNo].Discount = o.Discount;
                                     if (o.Subtotal) groupedActive[o.OrderNo].Subtotal = o.Subtotal;
+                                    if (o.Remarks && !groupedActive[o.OrderNo].Remarks) groupedActive[o.OrderNo].Remarks = o.Remarks;
                                 });
 
                                 let activeHTML = '<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 w-full">'; 
                                 Object.values(groupedActive).forEach(group => {
                                     const mop = group.MOP || 'Cash';
-                                    let badgeColor = 'bg-gray-100 text-gray-800';
-                                    if(mop.toLowerCase().includes('cash')) badgeColor = 'bg-green-100 text-green-800';
-                                    if(mop.toLowerCase().includes('gcash')) badgeColor = 'bg-blue-100 text-blue-800';
                                     
+                                    // --- DYNAMIC COLOR LOGIC ---
+                                    let mopClass = 'bg-gray-100 text-gray-800 border-gray-200';
+                                    let iconClass = 'text-gray-500';
+                                    const mLower = mop.toLowerCase();
+
+                                    if(mLower.includes('gcash')) { mopClass = 'bg-blue-100 text-blue-800 border-blue-200'; iconClass = 'text-blue-600'; }
+                                    else if(mLower.includes('cash')) { mopClass = 'bg-green-100 text-green-800 border-green-200'; iconClass = 'text-green-600'; }
+                                    else if(mLower.includes('bpi')) { mopClass = 'bg-red-100 text-red-800 border-red-200'; iconClass = 'text-red-600'; }
+                                    else if(mLower.includes('gotyme')) { mopClass = 'bg-cyan-100 text-cyan-800 border-cyan-200'; iconClass = 'text-cyan-600'; }
+
+                                    // --- STYLED DROPDOWN WITH ARROW ---
+                                    const mopSelectHTML = `
+                                        <div class="relative inline-block group/select">
+                                            <select onchange="handleMopUpdate('${group.OrderNo}', this.value)" 
+                                                    class="${mopClass} appearance-none pl-3 pr-7 py-0.5 rounded-full text-[10px] font-bold uppercase border cursor-pointer outline-none focus:ring-2 focus:ring-opacity-50 transition-all shadow-sm hover:shadow-md">
+                                                ${['Cash', 'Gcash', 'BPI', 'GoTyme'].map(opt => `<option value="${opt}" ${mop === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                                            </select>
+                                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5">
+                                                <i data-lucide="chevron-down" class="w-3 h-3 ${iconClass}"></i>
+                                            </div>
+                                        </div>`;
+
                                     const isPaidChecked = group.PaidStatus ? 'checked' : '';
                                     const isReadyChecked = group.ReadyStatus ? 'checked' : '';
+
+                                    // Remarks Note
+                                    const remarksSection = group.Remarks ? 
+                                        `<div class="mt-3 bg-yellow-50 border border-yellow-100 rounded-md p-2 flex items-start animate-fade-in">
+                                            <i data-lucide="sticky-note" class="w-4 h-4 text-yellow-500 mr-2 mt-0.5 flex-shrink-0"></i>
+                                            <span class="text-xs font-bold text-yellow-800 italic leading-tight">${group.Remarks}</span>
+                                         </div>` : '';
 
                                     activeHTML += `
                                     <div class="relative bg-white border border-gray-200 border-t-8 border-gray-400 rounded-xl shadow-lg overflow-visible order-card h-fit mt-4" id="card-order-${group.OrderNo}">
                                         <div id="status-badge-${group.OrderNo}" class="absolute -top-4 left-4 px-4 py-1.5 rounded-full text-white text-xs font-bold shadow-md z-20 transition-colors bg-gray-600 ring-2 ring-white">Loading...</div>
                                         <div class="bg-gray-50 p-4 pt-6 flex justify-between items-start border-b border-gray-200">
-                                            <div class="flex flex-col gap-1 mr-2">
-                                                <div class="font-bold text-gray-900 text-xl leading-none">Order #${group.OrderNo}</div>
-                                                <div class="text-sm font-semibold text-primary uppercase tracking-wide truncate max-w-[160px]" title="${group.Customer}">${group.Customer || 'Guest'}</div>
-                                                <div class="mt-2"><span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border inline-block ${badgeColor}">${mop}</span></div>
-                                            </div>
-                                            <div class="flex flex-col items-end gap-2">
-                                                <button id="btn-done-${group.OrderNo}" onclick="markOrderDone('${group.OrderNo}')" disabled class="bg-gray-400 text-white text-xs font-bold px-4 py-2 rounded-lg shadow flex items-center h-8 cursor-not-allowed transition-all">DONE <i data-lucide="check" class="w-3 h-3 ml-1"></i></button>
-                                                <div class="timer-display font-mono font-bold text-lg bg-white border border-gray-300 px-3 py-1 rounded text-gray-700 shadow-sm text-center min-w-[70px]" data-start-time="${group.StartTime}" id="timer-${group.OrderNo}">...</div>
+                                            <div class="flex flex-col gap-1 mr-2 w-full">
+                                                <div class="flex justify-between items-start">
+                                                    <div>
+                                                        <div class="font-bold text-gray-900 text-xl leading-none">Order #${group.OrderNo}</div>
+                                                        <div class="text-sm font-semibold text-primary uppercase tracking-wide truncate max-w-[160px]" title="${group.Customer}">${group.Customer || 'Guest'}</div>
+                                                    </div>
+                                                     <div class="flex flex-col items-end gap-2">
+                                                        <button id="btn-done-${group.OrderNo}" onclick="markOrderDone('${group.OrderNo}')" disabled class="bg-gray-400 text-white text-xs font-bold px-4 py-2 rounded-lg shadow flex items-center h-8 cursor-not-allowed transition-all">DONE <i data-lucide="check" class="w-3 h-3 ml-1"></i></button>
+                                                        <div class="timer-display font-mono font-bold text-lg bg-white border border-gray-300 px-3 py-1 rounded text-gray-700 shadow-sm text-center min-w-[70px]" data-start-time="${group.StartTime}" id="timer-${group.OrderNo}">...</div>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-2 flex items-center justify-between">
+                                                     ${mopSelectHTML}
+                                                </div>
+                                                ${remarksSection}
                                             </div>
                                         </div>
                                         <div class="overflow-x-auto">
@@ -768,10 +811,13 @@
                                 activeHTML += '</div>';
                                 activeContainer.innerHTML = activeHTML;
                                 Object.values(groupedActive).forEach(group => checkDoneStatus(group.OrderNo));
+                                
+                                // RESTART TIMERS ON REFRESH
                                 startOrderTimers();
                                 lucide.createIcons(); 
                             }
 
+                            // --- 2. RENDER COMPLETED ORDERS ---
                             if (completedOrdersList.length === 0) {
                                 completedContainer.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">No completed orders yet.</td></tr>`;
                             } else {
@@ -806,13 +852,161 @@
                                     }).join('');
                                 }).join('');
                             }
+
+                            // --- 3. RENDER INVENTORY MOVEMENT ---
+                            if (inventoryContainer) {
+                                if (inventoryList.length === 0) {
+                                    inventoryContainer.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">No inventory movement.</td></tr>`;
+                                } else {
+                                    inventoryContainer.innerHTML = inventoryList.map(inv => `
+                                        <tr class="hover:bg-gray-50 text-[10px] md:text-sm border-b border-gray-50 transition-colors">
+                                            <td class="py-2 px-1 md:py-3 md:px-4 font-bold ${inv.Type === 'IN' ? 'text-green-600' : 'text-red-600'}">${inv.Type}</td>
+                                            <td class="py-2 px-1 md:py-3 md:px-4 text-gray-500">${inv.Category}</td>
+                                            <td class="py-2 px-1 md:py-3 md:px-4 font-medium text-gray-800">${inv.Item}</td>
+                                            <td class="py-2 px-1 md:py-3 md:px-4 text-center text-gray-500">${inv.Unit}</td>
+                                            <td class="py-2 px-1 md:py-3 md:px-4 text-right font-bold text-gray-900">${inv.Qty}</td>
+                                        </tr>
+                                    `).join('');
+                                }
+                            }
+
+                            // --- 4. NEW: BUO CLAIM LOG CONTAINER ---
+                            const buoData = response.data.buoClaims || [];
+                            const userTier = sessionStorage.getItem('takos_tier') || 'STAFF'; // Get Tier
+                            const buoContainer = document.getElementById('buo-claim-container'); // Need to add this ID to HTML generator later
+                            
+                            // Check if container exists in DOM (it won't yet, so we append it if missing or update it)
+                            let buoWrapper = document.getElementById('buo-wrapper-div');
+                            if (!buoWrapper) {
+                                // Create the container if it doesn't exist yet
+                                buoWrapper = document.createElement('div');
+                                buoWrapper.id = 'buo-wrapper-div';
+                                buoWrapper.className = 'grid grid-cols-1 gap-6 mb-8';
+                                buoWrapper.innerHTML = `
+                                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                                        <div class="flex justify-between items-center border-b pb-2 mb-4">
+                                            <h2 class="text-xl font-bold text-gray-800 border-b-0">Buo Claim Log</h2>
+                                            ${userTier === 'ADMIN' ? 
+                                                `<button id="btn-claim-confirm" onclick="executeBuoClaim()" disabled class="bg-gray-300 text-white font-bold py-1.5 px-4 rounded-lg shadow-sm text-xs transition-colors flex items-center cursor-not-allowed">
+                                                    CLAIM <i data-lucide="check-circle-2" class="w-4 h-4 ml-1"></i>
+                                                </button>` : ''
+                                            }
+                                        </div>
+                                        <div class="overflow-x-auto w-full mx-auto">
+                                            <table class="w-full text-sm text-left">
+                                                <thead class="bg-gray-100 text-gray-600 font-medium border-b">
+                                                    <tr>
+                                                        <th class="py-2 px-4">Date</th>
+                                                        <th class="py-2 px-4 text-right">BUO</th>
+                                                        <th class="py-2 px-4 text-center">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="buo-claim-body" class="divide-y divide-gray-100"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>`;
+                                // Append to the main module content (assuming 'module-content' is the parent)
+                                document.getElementById('module-content').appendChild(buoWrapper);
+                            }
+
+                            // Render Rows
+                            const buoBody = document.getElementById('buo-claim-body');
+                            if (buoData.length === 0) {
+                                buoBody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-500">No unclaimed records.</td></tr>`;
+                            } else {
+                                buoBody.innerHTML = buoData.map((row, idx) => {
+                                    let statusHTML = '';
+                                    if (userTier === 'ADMIN') {
+                                        // Toggle Switch
+                                        statusHTML = `
+                                            <label class="inline-flex items-center cursor-pointer justify-center w-full">
+                                                <input type="checkbox" class="sr-only peer buo-checkbox" data-date="${row.Date}" onchange="toggleClaimButton()">
+                                                <div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                            </label>`;
+                                    } else {
+                                        // Staff Badge
+                                        statusHTML = `<span class="bg-gray-200 text-gray-500 text-[10px] font-bold px-2 py-1 rounded-full">UNCLAIMED</span>`;
+                                    }
+
+                                    return `
+                                        <tr class="hover:bg-gray-50 transition-colors">
+                                            <td class="py-3 px-4 font-mono text-gray-700">${row.Date}</td>
+                                            <td class="py-3 px-4 text-right font-bold text-gray-900">${formatCurrency(row.Amount)}</td>
+                                            <td class="py-3 px-4 text-center">${statusHTML}</td>
+                                        </tr>
+                                    `;
+                                }).join('');
+                            }
+                            lucide.createIcons();
+                            
                         }
                     }
                 } catch (e) { 
                     console.error("Dashboard Load Error", e);
                 }
-            }
-            
+            };
+
+            // Toggle the Master CLAIM button based on selection
+            window.toggleClaimButton = () => {
+                const checkboxes = document.querySelectorAll('.buo-checkbox:checked');
+                const btn = document.getElementById('btn-claim-confirm');
+                if (!btn) return;
+
+                if (checkboxes.length > 0) {
+                    btn.disabled = false;
+                    btn.classList.remove('bg-gray-300', 'cursor-not-allowed');
+                    btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-pointer');
+                } else {
+                    btn.disabled = true;
+                    btn.classList.add('bg-gray-300', 'cursor-not-allowed');
+                    btn.classList.remove('bg-green-600', 'hover:bg-green-700', 'cursor-pointer');
+                }
+            };
+
+            // Execute the claim
+            window.executeBuoClaim = () => {
+                const checkboxes = document.querySelectorAll('.buo-checkbox:checked');
+                if (checkboxes.length === 0) return;
+
+                const btn = document.getElementById('btn-claim-confirm');
+                const orig = btn.innerHTML;
+                btn.disabled = true;
+                btn.textContent = 'Processing...';
+
+                // Process sequentially or Promise.all (Sequential is safer for sheets)
+                const claims = Array.from(checkboxes).map(cb => cb.getAttribute('data-date'));
+                
+                // We'll just send the first one for now, or loop. 
+                // To keep it simple and robust, let's claim one by one or modify backend to accept array.
+                // Loop is safer for now without changing backend logic too much.
+                
+                let completed = 0;
+                claims.forEach(date => {
+                    sendData('CLAIM_BUO', { date: date }).then(res => {
+                        completed++;
+                        if (completed === claims.length) {
+                            triggerNotification('Success', 'Buo Claimed Successfully', 'success');
+                            // Refresh dashboard
+                            setTimeout(() => initDashboardModule(true), 500);
+                        }
+                    });
+                });
+            };
+
+            // --- HELPER FUNCTIONS ---
+
+            window.handleMopUpdate = (orderId, newMop) => {
+                sendData('UPDATE_ORDER_MOP', { orderId: orderId, newMop: newMop })
+                    .then(res => {
+                        if(res.success) {
+                            triggerNotification('Updated', res.message, 'info');
+                        } else {
+                            showModal('Error', res.message, 'OK', hideModal, true);
+                            initDashboardModule(true); 
+                        }
+                    });
+            };
+
             window.startOrderTimers = () => {
                 if (orderTimerInterval) clearInterval(orderTimerInterval);
                 const updateTimers = () => {
@@ -856,18 +1050,28 @@
             window.markOrderDone = (orderId) => {
                 const card = document.getElementById(`card-order-${orderId}`);
                 if(card) {
-                    // Visual feedback immediately
                     card.style.opacity = '0';
                     card.style.transform = 'scale(0.95)';
                     
                     sendData('MARK_ORDER_DONE', { orderId: orderId })
                         .then(() => {
-                            // Wait a moment for visual transition, then hard refresh data
                             setTimeout(() => {
                                 initDashboardModule(true);
                             }, 500);
                         });
                 }
+            };
+            
+            window.handleMopUpdate = (orderId, newMop) => {
+                sendData('UPDATE_ORDER_MOP', { orderId: orderId, newMop: newMop })
+                    .then(res => {
+                        if(res.success) {
+                            triggerNotification('Updated', res.message, 'info');
+                        } else {
+                            showModal('Error', res.message, 'OK', hideModal, true);
+                            initDashboardModule(true); // Revert if failed
+                        }
+                    });
             };
 
             function initPOSModule() {
@@ -1007,6 +1211,7 @@
                     showModal('Confirm Clear', '<p>Clear all items?</p>', 'Yes', () => {
                         posCart = []; updateCartDisplay(); updateCheckoutSummary(); hideModal();
                         document.getElementById('customer-name-input').value = '';
+                        document.getElementById('remarks-input').value = '';
                     }, false);
                 };
 
@@ -1017,9 +1222,11 @@
                     const subtotal = posCart.reduce((sum, item) => sum + (item.Price * item.Qty), 0);
                     const discount = parseFloat(document.getElementById('discount-input').value) || 0;
                     const customerName = document.getElementById('customer-name-input').value.trim();
+                    const remarks = document.getElementById('remarks-input').value.trim(); // <--- NEW
                     const mop = document.getElementById('mop-select').value;
-                    const data = { cart: posCart, subtotal, discount, total: subtotal - discount, mop: mop, customerName: customerName };
-                    
+
+                    // Add remarks to the data object
+                    const data = { cart: posCart, subtotal, discount, total: subtotal - discount, mop: mop, customerName: customerName, remarks: remarks };    
                     const btn = document.getElementById('checkout-button');
                     const orig = btn.innerHTML;
                     btn.disabled = true; 
@@ -1035,6 +1242,7 @@
                             updateCartDisplay(); 
                             updateCheckoutSummary(); 
                             document.getElementById('customer-name-input').value = '';
+                            document.getElementById('remarks-input').value = '';
 
                             // 3. SHOW CONFIRMATION MODAL
                             // increased z-index in CSS ensures it shows over everything
@@ -1554,21 +1762,103 @@
 
             // 4. CONFIRM SUBMIT
             window.confirmSubmitReport = () => {
-                document.getElementById('confirm-submit-modal').classList.remove('hidden');
+                // 1. Safety Check
+                if (!window.currentReportData) {
+                    showModal('Loading...', '<p class="text-gray-500">Syncing data...</p>', 'OK', hideModal, true);
+                    return;
+                }
+
+                const status = window.currentReportData.status;
+                const modal = document.getElementById('confirm-submit-modal');
+                // We select the "Card" (the white box inside the modal backdrop)
+                const card = modal.firstElementChild; 
+
+                let headerClass = "";
+                let titleText = "";
+                let titleColor = "";
+                let iconName = "";
+                let bodyContent = "";
+                let confirmBtnHTML = "";
+
+                // --- STATE A: ERROR (Inputs not updated today) ---
+                if (!status || !status.inputsUpdatedToday) {
+                    headerClass = "bg-red-600";
+                    iconName = "alert-octagon";
+                    titleText = "Cannot Submit Yet";
+                    titleColor = "text-red-600";
+                    bodyContent = `Daily inputs (BUO, Timpla, Tira) have NOT been updated for <b>TODAY</b> yet.<br><br><span class="text-red-600 font-bold">Please update the record first.</span>`;
+                    // No Confirm Button
+                    confirmBtnHTML = ``; 
+                } 
+                // --- STATE B: WARNING (Report exists -> Overwrite) ---
+                else if (status.reportAlreadySubmitted) {
+                    headerClass = "bg-orange-500";
+                    iconName = "alert-triangle";
+                    titleText = "Overwrite Existing Report?";
+                    titleColor = "text-gray-900";
+                    bodyContent = `A report for today already exists.<br>Do you want to <b class="text-orange-600">overwrite</b> it with this new data?`;
+                    
+                    confirmBtnHTML = `
+                    <button onclick="executeSubmitReport()" class="px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-lg transition-colors flex items-center justify-center">
+                        Yes, Overwrite
+                    </button>`;
+                } 
+                // --- STATE C: NORMAL (Standard Submit) ---
+                else {
+                    headerClass = "bg-green-600";
+                    iconName = "send";
+                    titleText = "Submit Final Report?";
+                    titleColor = "text-gray-900";
+                    bodyContent = `Are you sure you want to close the day?<br>This will archive all sales and inventory data.`;
+                    
+                    confirmBtnHTML = `
+                    <button onclick="executeSubmitReport()" class="px-5 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg transition-colors flex items-center justify-center">
+                        Yes, Submit
+                    </button>`;
+                }
+
+                // 2. REBUILD THE CARD HTML (Forces Clean Layout)
+                card.className = "bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100";
+                card.innerHTML = `
+                    <div class="${headerClass} p-4 flex justify-center">
+                        <div class="bg-white/20 p-3 rounded-full">
+                            <i data-lucide="${iconName}" class="w-8 h-8 text-white"></i>
+                        </div>
+                    </div>
+                    <div class="p-6 text-center">
+                        <h3 class="text-xl font-bold ${titleColor} mb-2">${titleText}</h3>
+                        <p class="text-sm text-gray-500 mb-6">${bodyContent}</p>
+                        <div class="flex gap-3 justify-center">
+                            <button onclick="document.getElementById('confirm-submit-modal').classList.add('hidden')" class="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">
+                                ${(!status || !status.inputsUpdatedToday) ? 'Close' : 'Cancel'}
+                            </button>
+                            ${confirmBtnHTML}
+                        </div>
+                    </div>
+                `;
+
+                // 3. Render Icons & Show
+                lucide.createIcons();
+                modal.classList.remove('hidden');
             };
 
-            // 5. EXECUTE SUBMIT (Reverted to Fullname)
+            //5. --- UPDATED SUBMISSION HANDLER WITH SUCCESS CONFIRMATION ---
             window.executeSubmitReport = () => {
-                document.getElementById('confirm-submit-modal').classList.add('hidden');
+                const modal = document.getElementById('confirm-submit-modal');
+                // Since we rebuilt HTML, we find the last button in the card
+                const btn = modal.querySelector('button:last-child');
+                const origText = btn.textContent;
                 
+                // 1. Loading State
+                btn.disabled = true;
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>`;
+                lucide.createIcons();
+
                 if (!window.currentReportData) return;
                 const d = window.currentReportData;
-                
-                // BACK TO FULL NAME
                 const submitterName = sessionStorage.getItem('takos_fullname') || "User";
 
-                triggerNotification('Submitting...', 'Archiving daily report...', 'info');
-
+                // 2. Send Data
                 sendData('SUBMIT_FULL_REPORT', { 
                     buo: d.financial.calculations.buo,
                     sales: d.financial.transactions.totalSales,
@@ -1587,11 +1877,36 @@
                     wastage: d.inventory.batter.ratio,
                     submitter: submitterName 
                 }).then(res => {
+                    modal.classList.add('hidden'); // Hide confirm modal
+                    btn.disabled = false;
+                    btn.textContent = origText;
+
                     if(res.success) {
-                        triggerNotification('Report Saved', 'Daily report archived to database.', 'success');
+                        // 3. SHOW SUCCESS MODAL
+                        showModal(
+                            'Report Saved', 
+                            `<div class="flex flex-col items-center py-4">
+                                <div class="p-3 bg-green-100 rounded-full mb-4">
+                                    <i data-lucide="check-check" class="w-8 h-8 text-green-600"></i>
+                                </div>
+                                <p class="text-gray-800 font-bold text-lg mb-1">${res.message}</p>
+                                <p class="text-gray-500 text-sm">Data has been successfully archived.</p>
+                             </div>`, 
+                            'Done', 
+                            () => {
+                                hideModal();
+                                loadReportData(); // Refresh data
+                            }, 
+                            true // Hide cancel button
+                        );
+                        lucide.createIcons();
                     } else {
                         triggerNotification('Save Failed', res.message, 'error');
                     }
+                }).catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = origText;
+                    triggerNotification('Error', err.message, 'error');
                 });
             };
 
@@ -1782,233 +2097,234 @@
             // (e.g., inside initPOSModule), so we do NOT need to list them here.
             // Listing them here causes the "ReferenceError" crash.
 
-        }); // <--- END OF DOMContentLoaded
-        
-        // --- DYNAMIC CONTENT GENERATORS (HTML Strings) ---
-        const Card = (icon, title, value, color) => `<div class="p-6 bg-white rounded-xl shadow-lg border-l-4 border-${color}-500 hover:shadow-xl transition-shadow"><div class="flex justify-between items-center"><div><p class="text-sm font-medium text-gray-500">${title}</p><p class="text-3xl font-bold text-gray-900">${value}</p></div><i data-lucide="${icon}" class="w-8 h-8 text-${color}-500 opacity-70"></i></div></div>`;
-        const generateDashboardContent = () => `<div class="mb-8"><h2 class="text-2xl font-bold mb-4 text-gray-900 flex items-center"><i data-lucide="chef-hat" class="w-6 h-6 mr-2 text-primary"></i> Active Orders</h2><div id="orders-active-container"><div class="bg-white p-6 rounded-xl shadow-lg flex items-center justify-center text-gray-500">Loading orders...</div></div></div><div class="mb-8"><div class="bg-white rounded-xl shadow-lg overflow-hidden"><div class="bg-gray-50 px-6 py-4 border-b border-gray-200"><h2 class="text-xl font-bold text-gray-800 flex items-center"><i data-lucide="check-circle" class="w-5 h-5 mr-2 text-green-600"></i> Completed Orders</h2></div><div class="overflow-x-auto w-full mx-auto max-h-[300px] overflow-y-auto"><table class="w-full text-[10px] md:text-sm text-left"> <thead class="bg-gray-100 text-gray-600 font-medium border-b sticky top-0 z-10"><tr><th class="py-1 px-0.5 md:py-3 md:px-4">Order#</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Customer</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Item</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">Qty</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Amt</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Sub</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Disc</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Total</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">MOP</th></tr></thead><tbody id="orders-completed-body" class="divide-y divide-gray-100"><tr><td colspan="9" class="p-4 text-center text-gray-500">Loading...</td></tr></tbody></table></div></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-primary border-b pb-2">Transactions</h2><div class="space-y-4">${Card('dollar-sign', 'Total Sales', '<span id="dash-total-sales">Loading...</span>', 'primary')} ${Card('trending-down', 'Total Expenses', '<span id="dash-total-expenses">Loading...</span>', 'red')} ${Card('tag', 'Total Discounts', '<span id="dash-total-discounts">Loading...</span>', 'yellow')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Payment Breakdown</h2><div class="space-y-4">${Card('wallet', 'Cash', '<span id="dash-cash">Loading...</span>', 'green')} ${Card('smartphone', 'Gcash', '<span id="dash-gcash">Loading...</span>', 'blue')} ${Card('credit-card', 'BPI', '<span id="dash-bpi">Loading...</span>', 'red')} ${Card('zap', 'GoTyme', '<span id="dash-gotyme">Loading...</span>', 'cyan')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Order Metrics</h2><div class="space-y-4">${Card('scale', 'AOV', '<span id="dash-aov">Loading...</span>', 'blue')} ${Card('package', 'Number of Orders', '<span id="dash-orders">Loading...</span>', 'indigo')}</div></div></div><div class="grid grid-cols-1 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Inventory Movement</h2><div class="overflow-x-auto w-full mx-auto"><table class="w-full text-[10px] md:text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-medium border-b"><tr><th class="py-2 px-1 md:py-3 md:px-4">Type</th><th class="py-2 px-1 md:py-3 md:px-4">Category</th><th class="py-2 px-1 md:py-3 md:px-4">Item</th><th class="py-2 px-1 md:py-3 md:px-4 text-center">Unit</th><th class="py-2 px-1 md:py-3 md:px-4 text-right">Qty</th></tr></thead><tbody id="inventory-movement-table-body" class="divide-y divide-gray-100"><tr><td colspan="5" class="p-4 text-center text-gray-500">Loading movement...</td></tr></tbody></table></div></div></div>`;
-        const generatePOSContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col h-full"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2">Select Item</h2><div class="mb-4 flex flex-col md:flex-row gap-4 items-stretch md:items-center bg-gray-50 p-3 rounded-lg border"><div class="flex items-center justify-center md:justify-start w-full md:w-auto"><label class="font-medium text-gray-700 mr-3 hidden md:block">Qty:</label><button onclick="handleQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-l-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="minus" class="w-5 h-5 text-gray-700"></i></button><input type="number" id="item-qty-input" value="1" class="w-20 text-center h-12 border-y border-gray-300 font-bold text-xl focus:outline-none text-gray-800"><button onclick="handleQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-r-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="plus" class="w-5 h-5 text-gray-700"></i></button></div><button id="pos-add-btn" onclick="addSelectedToCart()" disabled class="flex-grow bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all flex items-center justify-center transform active:scale-95 text-lg"><i data-lucide="shopping-cart" class="w-6 h-6 mr-2"></i> ADD TO CART</button></div><div id="pos-grid-container" class="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 overflow-y-auto max-h-[60vh] pr-1 pb-2"><div class="col-span-full text-center text-gray-400 py-10">Loading items...</div></div></div></div><div class="lg:col-span-1 flex flex-col space-y-4"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col min-h-[400px]"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Cart</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-gray-500 uppercase"><tr><th class="px-2 py-3 text-left">Item</th><th class="px-1 py-3 text-center">Qty</th><th class="px-2 py-3 text-right">Total</th><th class="w-6"></th></tr></thead><tbody id="cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Checkout</h2><div class="space-y-3"><div class="flex justify-between text-lg font-medium"><span class="text-gray-600">Subtotal:</span><span id="subtotal-display" class="font-bold">₱0.00</span></div><div class="flex justify-between items-center"><label class="text-sm font-medium text-gray-700">Discount:</label><input type="number" id="discount-input" value="0.00" class="w-24 p-1 border rounded text-right font-semibold text-primary focus:ring-primary focus:border-primary"></div><div class="flex justify-between text-2xl font-bold font-title text-primary pt-2 border-t border-dashed border-gray-300"><span>TOTAL:</span><span id="total-display">₱0.00</span></div></div><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label><div class="relative"><select id="mop-select" class="block w-full p-2.5 border border-gray-300 rounded-lg appearance-none bg-gray-50 focus:bg-white font-medium"><option>Cash</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Customer (Optional)</label><input type="text" id="customer-name-input" class="block w-full p-2.5 border border-gray-300 rounded-lg" placeholder="Name"></div></div><div class="grid grid-cols-2 gap-3 pt-2"><button onclick="clearOrder()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="checkout-button" onclick="checkoutOrder()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
-        const generateExpensesContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2 flex items-center"><i data-lucide="wallet" class="w-5 h-5 mr-2"></i> Record Expense</h2><div class="grid grid-cols-2 md:grid-cols-5 gap-4 items-end"><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Type</label><div class="relative h-12"><select id="expense-type-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white"><option>Loading...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Item</label><input type="text" id="expense-item-input" class="block w-full h-12 px-3 border rounded-lg"></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleExpenseQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="expense-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleExpenseQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Price</label><input type="number" id="expense-price-input" class="block w-full h-12 px-3 border rounded-lg text-right"></div><div class="col-span-2 md:col-span-1"><button id="add-to-expense-cart-button" class="w-full h-12 bg-expense text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus-circle" class="w-5 h-5 mr-2"></i> Add</button></div></div></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Expense List</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 text-[10px] md:text-sm text-gray-600 font-semibold"><tr><th class="px-1 py-2 md:px-2 md:py-3 text-left">Type</th><th class="px-1 py-2 md:px-2 md:py-3 text-left">Item</th><th class="px-1 py-2 md:px-2 md:py-3 text-center">Qty</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Price</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Amt</th><th class="px-1 py-2 md:px-2 md:py-3"></th></tr></thead><tbody id="expense-cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="lg:col-span-1 bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Summary</h2><div class="flex justify-between text-2xl font-bold font-title text-expense pt-2"><span>TOTAL:</span><span id="expense-total-display">₱0.00</span></div><div class="grid grid-cols-2 gap-3 pt-4"><button onclick="handleClearExpenseCart()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="add-expense-button" onclick="handleAddExpense()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div>`;
-        const generateInventoryContent = () => `<div class="space-y-6"><div class="space-y-6"><div><h3 class="text-xl font-title font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="clock-4" class="w-6 h-6 mr-2 text-yellow-500"></i> Pending REQ</h3><div id="inventory-requests-container"><div class="bg-white p-6 rounded-xl shadow-lg text-center text-gray-500">Loading requests...</div></div></div></div><div class="bg-white rounded-xl shadow-lg overflow-hidden space-y-6"><div class="flex items-end bg-gray-100 border-b border-gray-200 px-4 pt-2 space-x-1"><button id="inv-tab-IN" onclick="setInventoryTab('IN')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-blue-500 bg-white text-blue-700">IN</button><button id="inv-tab-OUT" onclick="setInventoryTab('OUT')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">OUT</button><button id="inv-tab-REJ" onclick="setInventoryTab('REJ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REJ</button><button id="inv-tab-REQ" onclick="setInventoryTab('REQ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REQ</button></div><div class="p-6 space-y-6"><div class="border-b pb-6"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 flex items-center"><i data-lucide="package-plus" class="w-5 h-5 mr-2"></i> Transaction</h2><div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1">Category</label><div class="relative h-12"><select id="inventory-category-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><option value="" disabled selected>Select...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-2"><label class="block text-sm font-medium mb-1">Item</label><div class="relative h-12"><select id="inventory-item-select" disabled class="block w-full h-full px-3 border rounded-lg appearance-none bg-gray-50 text-gray-500 disabled:cursor-not-allowed"><option value="" disabled selected>Select Category First</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleInventoryQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="inventory-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleInventoryQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-5 md:col-span-1"><button id="add-inventory-btn" class="w-full h-12 bg-inventory text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add</button></div></div></div><div><h2 class="text-xl font-title font-semibold mb-4 text-gray-800">Summary</h2><div class="overflow-x-auto rounded-lg border border-gray-200 max-h-[40vh] w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Category</th><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Item</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Qty</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Unit</th><th class="px-1 py-2 md:px-4 md:py-3"></th></tr></thead><tbody id="inventory-summary-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="flex justify-end space-x-4 pt-4 border-t"><button onclick="handleClearInventory()" class="bg-red-100 text-red-600 hover:bg-red-200 px-6 py-3 rounded-lg font-bold shadow-sm flex items-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-2"></i> Clear</button><button onclick="handleSubmitInventory()" id="submit-inventory-btn" class="bg-primary hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold shadow-xl flex items-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
-        const generateAttendanceContent = () => `
-        <div class="max-w-4xl mx-auto space-y-6 md:space-y-8">
-            <div class="bg-white p-4 md:p-8 rounded-xl shadow-2xl border-t-8 border-attendance">
-                <h2 class="text-xl md:text-2xl font-title font-bold text-center text-gray-800 mb-6 md:mb-8">Staff Attendance Log</h2>
-                
-                <div class="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8">
+            }); // <--- END OF DOMContentLoaded
+            
+            // --- DYNAMIC CONTENT GENERATORS (HTML Strings) ---
+            const Card = (icon, title, value, color) => `<div class="p-6 bg-white rounded-xl shadow-lg border-l-4 border-${color}-500 hover:shadow-xl transition-shadow"><div class="flex justify-between items-center"><div><p class="text-sm font-medium text-gray-500">${title}</p><p class="text-3xl font-bold text-gray-900">${value}</p></div><i data-lucide="${icon}" class="w-8 h-8 text-${color}-500 opacity-70"></i></div></div>`;
+            const generateDashboardContent = () => `<div class="mb-8"><h2 class="text-2xl font-bold mb-4 text-gray-900 flex items-center"><i data-lucide="chef-hat" class="w-6 h-6 mr-2 text-primary"></i> Active Orders</h2><div id="orders-active-container"><div class="bg-white p-6 rounded-xl shadow-lg flex items-center justify-center text-gray-500">Loading orders...</div></div></div><div class="mb-8"><div class="bg-white rounded-xl shadow-lg overflow-hidden"><div class="bg-gray-50 px-6 py-4 border-b border-gray-200"><h2 class="text-xl font-bold text-gray-800 flex items-center"><i data-lucide="check-circle" class="w-5 h-5 mr-2 text-green-600"></i> Completed Orders</h2></div><div class="overflow-x-auto w-full mx-auto max-h-[300px] overflow-y-auto"><table class="w-full text-[10px] md:text-sm text-left"> <thead class="bg-gray-100 text-gray-600 font-medium border-b sticky top-0 z-10"><tr><th class="py-1 px-0.5 md:py-3 md:px-4">Order#</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Customer</th> <th class="py-1 px-0.5 md:py-3 md:px-4">Item</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">Qty</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Amt</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Sub</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Disc</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-right">Total</th><th class="py-1 px-0.5 md:py-3 md:px-4 text-center">MOP</th></tr></thead><tbody id="orders-completed-body" class="divide-y divide-gray-100"><tr><td colspan="9" class="p-4 text-center text-gray-500">Loading...</td></tr></tbody></table></div></div></div><div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-primary border-b pb-2">Transactions</h2><div class="space-y-4">${Card('dollar-sign', 'Total Sales', '<span id="dash-total-sales">Loading...</span>', 'primary')} ${Card('trending-down', 'Total Expenses', '<span id="dash-total-expenses">Loading...</span>', 'red')} ${Card('tag', 'Total Discounts', '<span id="dash-total-discounts">Loading...</span>', 'yellow')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Payment Breakdown</h2><div class="space-y-4">${Card('wallet', 'Cash', '<span id="dash-cash">Loading...</span>', 'green')} ${Card('smartphone', 'Gcash', '<span id="dash-gcash">Loading...</span>', 'blue')} ${Card('credit-card', 'BPI', '<span id="dash-bpi">Loading...</span>', 'red')} ${Card('zap', 'GoTyme', '<span id="dash-gotyme">Loading...</span>', 'cyan')}</div></div><div class="bg-white p-6 rounded-xl shadow-lg flex flex-col justify-between"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Order Metrics</h2><div class="space-y-4">${Card('scale', 'AOV', '<span id="dash-aov">Loading...</span>', 'blue')} ${Card('package', 'Number of Orders', '<span id="dash-orders">Loading...</span>', 'indigo')}</div></div></div><div class="grid grid-cols-1 gap-6 mb-8"><div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Inventory Movement</h2><div class="overflow-x-auto w-full mx-auto"><table class="w-full text-[10px] md:text-sm text-left"><thead class="bg-gray-100 text-gray-600 font-medium border-b"><tr><th class="py-2 px-1 md:py-3 md:px-4">Type</th><th class="py-2 px-1 md:py-3 md:px-4">Category</th><th class="py-2 px-1 md:py-3 md:px-4">Item</th><th class="py-2 px-1 md:py-3 md:px-4 text-center">Unit</th><th class="py-2 px-1 md:py-3 md:px-4 text-right">Qty</th></tr></thead><tbody id="inventory-movement-table-body" class="divide-y divide-gray-100"><tr><td colspan="5" class="p-4 text-center text-gray-500">Loading movement...</td></tr></tbody></table></div></div></div>`;
+            const generatePOSContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col h-full"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2">Select Item</h2><div class="mb-4 flex flex-col md:flex-row gap-4 items-stretch md:items-center bg-gray-50 p-3 rounded-lg border"><div class="flex items-center justify-center md:justify-start w-full md:w-auto"><label class="font-medium text-gray-700 mr-3 hidden md:block">Qty:</label><button onclick="handleQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-l-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="minus" class="w-5 h-5 text-gray-700"></i></button><input type="number" id="item-qty-input" value="1" class="w-20 text-center h-12 border-y border-gray-300 font-bold text-xl focus:outline-none text-gray-800"><button onclick="handleQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-12 rounded-r-lg flex items-center justify-center transition-colors shadow-sm"><i data-lucide="plus" class="w-5 h-5 text-gray-700"></i></button></div><button id="pos-add-btn" onclick="addSelectedToCart()" disabled class="flex-grow bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all flex items-center justify-center transform active:scale-95 text-lg"><i data-lucide="shopping-cart" class="w-6 h-6 mr-2"></i> ADD TO CART</button></div><div id="pos-grid-container" class="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 overflow-y-auto max-h-[60vh] pr-1 pb-2"><div class="col-span-full text-center text-gray-400 py-10">Loading items...</div></div></div></div><div class="lg:col-span-1 flex flex-col space-y-4"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col min-h-[400px]"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Cart</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 sticky top-0 z-10 shadow-sm text-xs font-bold text-gray-500 uppercase"><tr><th class="px-2 py-3 text-left">Item</th><th class="px-1 py-3 text-center">Qty</th><th class="px-2 py-3 text-right">Total</th><th class="w-6"></th></tr></thead><tbody id="cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Checkout</h2><div class="space-y-3"><div class="flex justify-between text-lg font-medium"><span class="text-gray-600">Subtotal:</span><span id="subtotal-display" class="font-bold">₱0.00</span></div><div class="flex justify-between items-center"><label class="text-sm font-medium text-gray-700">Discount:</label><input type="number" id="discount-input" value="0.00" class="w-24 p-1 border rounded text-right font-semibold text-primary focus:ring-primary focus:border-primary"></div><div class="flex justify-between text-2xl font-bold font-title text-primary pt-2 border-t border-dashed border-gray-300"><span>TOTAL:</span><span id="total-display">₱0.00</span></div></div><div class="grid grid-cols-2 gap-3"><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Payment Method</label><div class="relative"><select id="mop-select" class="block w-full p-2.5 border border-gray-300 rounded-lg appearance-none bg-gray-50 focus:bg-white font-medium"><option>Cash</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Customer (Optional)</label><input type="text" id="customer-name-input" class="block w-full p-2.5 border border-gray-300 rounded-lg" placeholder="Name"></div>
+            <div class="col-span-2"><label class="block text-xs font-bold text-gray-500 uppercase mb-1">Remarks</label><input type="text" id="remarks-input" class="block w-full p-2.5 border border-gray-300 rounded-lg" placeholder="e.g. No Mayo, Extra Sauce, Toasted..."></div></div><div class="grid grid-cols-2 gap-3 pt-2"><button onclick="clearOrder()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="checkout-button" onclick="checkoutOrder()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
+            const generateExpensesContent = () => `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 min-h-[80vh]"><div class="lg:col-span-2 flex flex-col space-y-4 md:space-y-6"><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 border-b pb-2 flex items-center"><i data-lucide="wallet" class="w-5 h-5 mr-2"></i> Record Expense</h2><div class="grid grid-cols-2 md:grid-cols-5 gap-4 items-end"><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Type</label><div class="relative h-12"><select id="expense-type-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white"><option>Loading...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-2 md:col-span-1"><label class="block text-sm font-medium mb-1">Item</label><input type="text" id="expense-item-input" class="block w-full h-12 px-3 border rounded-lg"></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleExpenseQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="expense-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleExpenseQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-12 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-1"><label class="block text-sm font-medium mb-1 text-left">Price</label><input type="number" id="expense-price-input" class="block w-full h-12 px-3 border rounded-lg text-right"></div><div class="col-span-2 md:col-span-1"><button id="add-to-expense-cart-button" class="w-full h-12 bg-expense text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus-circle" class="w-5 h-5 mr-2"></i> Add</button></div></div></div></div><div class="bg-white p-4 md:p-6 rounded-xl shadow-lg flex-grow overflow-hidden flex flex-col"><h2 class="text-xl font-title font-semibold mb-4 text-gray-800 border-b pb-2">Expense List</h2><div class="overflow-y-auto flex-grow border rounded-lg max-h-[40vh] lg:max-h-full w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 text-[10px] md:text-sm text-gray-600 font-semibold"><tr><th class="px-1 py-2 md:px-2 md:py-3 text-left">Type</th><th class="px-1 py-2 md:px-2 md:py-3 text-left">Item</th><th class="px-1 py-2 md:px-2 md:py-3 text-center">Qty</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Price</th><th class="px-1 py-2 md:px-2 md:py-3 text-right">Amt</th><th class="px-1 py-2 md:px-2 md:py-3"></th></tr></thead><tbody id="expense-cart-table-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="lg:col-span-1 bg-white p-4 md:p-6 rounded-xl shadow-lg flex flex-col space-y-4"><h2 class="text-xl font-title font-semibold text-gray-800 border-b pb-2">Summary</h2><div class="flex justify-between text-2xl font-bold font-title text-expense pt-2"><span>TOTAL:</span><span id="expense-total-display">₱0.00</span></div><div class="grid grid-cols-2 gap-3 pt-4"><button onclick="handleClearExpenseCart()" class="bg-red-100 text-red-600 hover:bg-red-200 p-3 rounded-lg font-bold shadow-sm flex items-center justify-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-1"></i> Clear</button><button id="add-expense-button" onclick="handleAddExpense()" class="bg-primary hover:bg-red-700 text-white p-3 rounded-lg text-lg font-bold shadow-md flex items-center justify-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div>`;
+            const generateInventoryContent = () => `<div class="space-y-6"><div class="space-y-6"><div><h3 class="text-xl font-title font-bold text-gray-800 mb-3 flex items-center"><i data-lucide="clock-4" class="w-6 h-6 mr-2 text-yellow-500"></i> Pending REQ</h3><div id="inventory-requests-container"><div class="bg-white p-6 rounded-xl shadow-lg text-center text-gray-500">Loading requests...</div></div></div></div><div class="bg-white rounded-xl shadow-lg overflow-hidden space-y-6"><div class="flex items-end bg-gray-100 border-b border-gray-200 px-4 pt-2 space-x-1"><button id="inv-tab-IN" onclick="setInventoryTab('IN')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-blue-500 bg-white text-blue-700">IN</button><button id="inv-tab-OUT" onclick="setInventoryTab('OUT')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">OUT</button><button id="inv-tab-REJ" onclick="setInventoryTab('REJ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REJ</button><button id="inv-tab-REQ" onclick="setInventoryTab('REQ')" class="flex-1 px-6 py-3 text-sm font-bold rounded-t-lg border-t-4 border-transparent text-gray-500">REQ</button></div><div class="p-6 space-y-6"><div class="border-b pb-6"><h2 class="text-xl font-title font-semibold mb-4 text-gray-900 flex items-center"><i data-lucide="package-plus" class="w-5 h-5 mr-2"></i> Transaction</h2><div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1">Category</label><div class="relative h-12"><select id="inventory-category-select" class="block w-full h-full px-3 border rounded-lg appearance-none bg-white font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><option value="" disabled selected>Select...</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-2"><label class="block text-sm font-medium mb-1">Item</label><div class="relative h-12"><select id="inventory-item-select" disabled class="block w-full h-full px-3 border rounded-lg appearance-none bg-gray-50 text-gray-500 disabled:cursor-not-allowed"><option value="" disabled selected>Select Category First</option></select><div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><i data-lucide="chevron-down" class="w-4 h-4"></i></div></div></div><div class="col-span-5 md:col-span-1"><label class="block text-sm font-medium mb-1 text-left">Qty</label><div class="flex h-12"><button onclick="handleInventoryQtyChange(-1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-l-lg flex items-center justify-center transition-colors"><i data-lucide="minus" class="w-4 h-4 text-gray-700"></i></button><input type="number" id="inventory-qty-input" value="1" class="w-full text-center h-full border-y border-gray-300 font-bold focus:outline-none"><button onclick="handleInventoryQtyChange(1)" class="rocker-button bg-gray-200 hover:bg-gray-300 w-10 h-full rounded-r-lg flex items-center justify-center transition-colors"><i data-lucide="plus" class="w-4 h-4 text-gray-700"></i></button></div></div><div class="col-span-5 md:col-span-1"><button id="add-inventory-btn" class="w-full h-12 bg-inventory text-white rounded-lg font-bold shadow-md flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5 mr-2"></i> Add</button></div></div></div><div><h2 class="text-xl font-title font-semibold mb-4 text-gray-800">Summary</h2><div class="overflow-x-auto rounded-lg border border-gray-200 max-h-[40vh] w-full mx-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Category</th><th class="px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm">Item</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Qty</th><th class="px-1 py-2 md:px-4 md:py-3 text-right text-[10px] md:text-sm">Unit</th><th class="px-1 py-2 md:px-4 md:py-3"></th></tr></thead><tbody id="inventory-summary-body" class="bg-white divide-y divide-gray-100"></tbody></table></div></div><div class="flex justify-end space-x-4 pt-4 border-t"><button onclick="handleClearInventory()" class="bg-red-100 text-red-600 hover:bg-red-200 px-6 py-3 rounded-lg font-bold shadow-sm flex items-center transition-colors"><i data-lucide="trash-2" class="w-5 h-5 mr-2"></i> Clear</button><button onclick="handleSubmitInventory()" id="submit-inventory-btn" class="bg-primary hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold shadow-xl flex items-center transition-colors"><i data-lucide="check-circle" class="w-5 h-5 mr-2"></i> Submit</button></div></div></div></div>`;
+            const generateAttendanceContent = () => `
+            <div class="max-w-4xl mx-auto space-y-6 md:space-y-8">
+                <div class="bg-white p-4 md:p-8 rounded-xl shadow-2xl border-t-8 border-attendance">
+                    <h2 class="text-xl md:text-2xl font-title font-bold text-center text-gray-800 mb-6 md:mb-8">Staff Attendance Log</h2>
                     
-                    <div class="w-full md:w-1/2">
-                        <label class="block text-sm font-bold text-gray-600 mb-2">Employee</label>
-                        <div class="p-4 border-2 border-gray-100 rounded-xl bg-gray-50 text-lg font-bold text-gray-800 flex items-center shadow-inner">
-                            <div class="w-10 h-10 min-w-[2.5rem] rounded-full bg-attendance text-white flex items-center justify-center font-bold mr-3" id="att-avatar">?</div>
-                            <span id="attendance-current-user" class="truncate">Loading...</span>
-                        </div>
-                    </div>
-
-                    <div class="flex space-x-4">
-                        <button id="btn-time-in" onclick="toggleAttendanceType('TIME IN')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-green-50">
-                            <i data-lucide="sun" class="w-8 h-8 text-green-600 mb-1"></i>
-                            <span class="text-xs font-bold text-green-700">TIME IN</span>
-                        </button>
-                        <button id="btn-time-out" onclick="toggleAttendanceType('TIME OUT')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 border-gray-200 opacity-70 transition-all duration-200 bg-white hover:bg-red-50">
-                            <i data-lucide="moon" class="w-8 h-8 text-red-600 mb-1"></i>
-                            <span class="text-xs font-bold text-red-700">TIME OUT</span>
-                        </button>
-                    </div>
-
-                    <div class="w-full md:w-auto">
-                        <button onclick="submitAttendance()" class="w-full md:w-32 h-16 bg-attendance text-white font-bold text-xl rounded-xl shadow-lg hover:bg-blue-600 transform transition hover:-translate-y-1 active:translate-y-0">
-                            ENTER
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-bold text-gray-700 flex items-center">
-                        <i data-lucide="history" class="w-5 h-5 mr-2 text-attendance"></i> Recent Activity
-                    </h3>
-                </div>
-                <div class="overflow-x-auto w-full mx-auto">
-                    <table class="min-w-full table-fixed">
-                        <thead class="bg-gray-100">
-                            <tr>
-                                <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Type</th>
-                                <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Nick</th>
-                                <th class="w-[35%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Full Name</th>
-                                <th class="w-[25%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-log-body" class="bg-white divide-y divide-gray-200"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>`;
-        const generateReportsContent = () => `
-            <div class="space-y-6">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
-                        <div class="text-xs text-gray-500 font-bold uppercase">Total Sales</div>
-                        <div class="text-xl font-bold text-gray-800 mt-1" id="rep-sales">0.00</div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
-                        <div class="text-xs text-gray-500 font-bold uppercase">Total Expenses</div>
-                        <div class="text-xl font-bold text-red-600 mt-1" id="rep-expenses">0.00</div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
-                        <div class="text-xs text-gray-500 font-bold uppercase">Discounts</div>
-                        <div class="text-xl font-bold text-gray-800 mt-1" id="rep-discounts">0.00</div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
-                        <div class="text-xs text-gray-500 font-bold uppercase">Cash Count (BUO)</div>
-                        <div class="text-xl font-bold text-green-700 mt-1" id="rep-buo">0.00</div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    <div class="lg:col-span-1 space-y-6">
-                        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-                            <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="edit-3" class="w-4 h-4 mr-2"></i> Daily Inputs</h3>
-                            <div class="space-y-3">
-                                <div>
-                                    <label class="text-xs font-bold text-gray-500">BUO (Cash Count)</label>
-                                    <input type="number" id="input-buo1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-bold text-gray-500">MOD (Marked Bills)</label>
-                                    <input type="number" id="input-mod1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-bold text-gray-500">TIMPLA</label>
-                                        <input type="number" id="input-timpla1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-bold text-gray-500">TIRA</label>
-                                        <input type="number" id="input-tira1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
-                                    </div>
-                                </div>
-                                <button id="update-report-btn" onclick="preCheckUpdateRecord()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow mt-2 transition-all">Update Record</button>
+                    <div class="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8">
+                        
+                        <div class="w-full md:w-1/2">
+                            <label class="block text-sm font-bold text-gray-600 mb-2">Employee</label>
+                            <div class="p-4 border-2 border-gray-100 rounded-xl bg-gray-50 text-lg font-bold text-gray-800 flex items-center shadow-inner">
+                                <div class="w-10 h-10 min-w-[2.5rem] rounded-full bg-attendance text-white flex items-center justify-center font-bold mr-3" id="att-avatar">?</div>
+                                <span id="attendance-current-user" class="truncate">Loading...</span>
                             </div>
                         </div>
 
-                        <div class="bg-white p-6 rounded-xl shadow-sm">
-                            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Cash Flow</h3>
-                            <div class="space-y-2 text-sm">
-                                <div class="flex justify-between border-b border-dashed pb-1"><span>Money In</span><span class="font-mono" id="rep-money-in">0.00</span></div>
-                                <div class="flex justify-between border-b border-dashed pb-1"><span>Money Out</span><span class="font-mono text-red-500" id="rep-money-out">0.00</span></div>
-                                <div class="flex justify-between border-b border-dashed pb-1"><span>MOD</span><span class="font-mono" id="rep-mod">0.00</span></div>
-                                <div class="flex justify-between pt-2"><span class="font-bold">Discrepancy</span><span class="font-bold font-mono text-lg" id="rep-discrepancy">0.00</span></div>
-                            </div>
+                        <div class="flex space-x-4">
+                            <button id="btn-time-in" onclick="toggleAttendanceType('TIME IN')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 transition-all duration-200 bg-white hover:bg-green-50">
+                                <i data-lucide="sun" class="w-8 h-8 text-green-600 mb-1"></i>
+                                <span class="text-xs font-bold text-green-700">TIME IN</span>
+                            </button>
+                            <button id="btn-time-out" onclick="toggleAttendanceType('TIME OUT')" class="flex flex-col items-center justify-center w-24 h-24 rounded-xl border-2 border-gray-200 opacity-70 transition-all duration-200 bg-white hover:bg-red-50">
+                                <i data-lucide="moon" class="w-8 h-8 text-red-600 mb-1"></i>
+                                <span class="text-xs font-bold text-red-700">TIME OUT</span>
+                            </button>
                         </div>
-                    </div>
 
-                    <div class="lg:col-span-2 space-y-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm h-full flex flex-col">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="font-bold text-gray-800 flex items-center"><i data-lucide="package-search" class="w-4 h-4 mr-2"></i> Inventory Reconciliation</h3>
-                                <div class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium">Wastage: <span id="rep-ratio" class="font-bold text-red-600">0.00</span></div>
-                            </div>
-                            
-                            <div class="grid grid-cols-2 gap-4 mb-4">
-                                <div class="bg-orange-50 p-3 rounded-lg text-center"><div class="text-xs text-orange-600 uppercase font-bold">Timpla</div><div class="text-lg font-bold text-orange-900" id="rep-timpla">0</div></div>
-                                <div class="bg-blue-50 p-3 rounded-lg text-center"><div class="text-xs text-blue-600 uppercase font-bold">Tira</div><div class="text-lg font-bold text-blue-900" id="rep-tira-inv">0</div></div>
-                            </div>
-
-                            <div class="space-y-4 flex-grow">
-                                <div>
-                                    <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">Inventory Discrepancies</h4>
-                                    <div class="overflow-x-auto border rounded-lg">
-                                        <table class="w-full text-sm text-left table-fixed">
-                                            <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200">
-                                                <tr>
-                                                    <th class="px-2 py-2 w-[20%]">Category</th>
-                                                    <th class="px-2 py-2 w-[25%]">Item</th>
-                                                    <th class="px-2 py-2 w-[10%] text-center">Unit</th>
-                                                    <th class="px-2 py-2 w-[15%] text-right">IUQTY</th>
-                                                    <th class="px-2 py-2 w-[15%] text-right">UQTY</th>
-                                                    <th class="px-2 py-2 w-[15%] text-right">OU%</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="table-discrepancies" class="divide-y divide-gray-100"></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <h4 class="text-xs font-bold text-blue-500 uppercase mb-2">Added Inventories</h4>
-                                        <div class="overflow-x-auto border rounded-lg max-h-48">
-                                            <table class="w-full text-sm text-left table-fixed">
-                                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
-                                                    <tr>
-                                                        <th class="px-2 py-1 w-[30%]">Category</th>
-                                                        <th class="px-2 py-1 w-[35%]">Item</th>
-                                                        <th class="px-2 py-1 w-[15%] text-center">Unit</th>
-                                                        <th class="px-2 py-1 w-[20%] text-right">Qty</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="table-added" class="divide-y divide-gray-100"></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h4 class="text-xs font-bold text-yellow-600 uppercase mb-2">Requested Inventories</h4>
-                                        <div class="overflow-x-auto border rounded-lg max-h-48">
-                                            <table class="w-full text-sm text-left table-fixed">
-                                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
-                                                    <tr>
-                                                        <th class="px-2 py-1 w-[30%]">Category</th>
-                                                        <th class="px-2 py-1 w-[35%]">Item</th>
-                                                        <th class="px-2 py-1 w-[15%] text-center">Unit</th>
-                                                        <th class="px-2 py-1 w-[20%] text-right">Qty</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="table-requested" class="divide-y divide-gray-100"></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="w-full md:w-auto">
+                            <button onclick="submitAttendance()" class="w-full md:w-32 h-16 bg-attendance text-white font-bold text-xl rounded-xl shadow-lg hover:bg-blue-600 transform transition hover:-translate-y-1 active:translate-y-0">
+                                ENTER
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Payment Methods</h3>
-                        <div class="grid grid-cols-2 gap-4 text-sm">
-                            <div class="flex justify-between border-b pb-1"><span>Cash</span><span class="font-bold" id="rep-cash">0.00</span></div>
-                            <div class="flex justify-between border-b pb-1"><span>GCash</span><span class="font-bold text-blue-600" id="rep-gcash">0.00</span></div>
-                            <div class="flex justify-between border-b pb-1"><span>BPI</span><span class="font-bold text-red-600" id="rep-bpi">0.00</span></div>
-                            <div class="flex justify-between border-b pb-1"><span>GoTyme</span><span class="font-bold text-cyan-600" id="rep-gotyme">0.00</span></div>
-                        </div>
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-700 flex items-center">
+                            <i data-lucide="history" class="w-5 h-5 mr-2 text-attendance"></i> Recent Activity
+                        </h3>
                     </div>
-                    <div class="bg-white p-6 rounded-xl shadow-sm">
-                        <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Expenses Today</h3>
-                        <div class="overflow-x-auto max-h-40 border rounded-lg">
-                            <table class="w-full text-sm text-left"><thead class="bg-gray-50 text-xs uppercase sticky top-0"><tr><th class="px-2 py-1">Type</th><th class="px-2 py-1">Item</th><th class="px-2 py-1 text-center">Qty</th><th class="px-2 py-1 text-right">Price</th><th class="px-2 py-1 text-right">Amt</th></tr></thead><tbody id="table-expenses-today" class="divide-y divide-gray-100"></tbody></table>
-                        </div>
+                    <div class="overflow-x-auto w-full mx-auto">
+                        <table class="min-w-full table-fixed">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Type</th>
+                                    <th class="w-[20%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Nick</th>
+                                    <th class="w-[35%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Full Name</th>
+                                    <th class="w-[25%] px-1 py-2 md:px-4 md:py-3 text-left text-[10px] md:text-sm font-bold text-gray-600">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendance-log-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
                     </div>
-                </div>
-
-                <div class="flex justify-end gap-3 pt-4 border-t">
-                    <button onclick="viewReportSnapshot()" class="flex items-center px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors shadow-sm">
-                        <i data-lucide="eye" class="w-5 h-5 mr-2"></i> View Snapshot
-                    </button>
-                    <button onclick="confirmSubmitReport()" class="flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105">
-                        <i data-lucide="send" class="w-5 h-5 mr-2"></i> Submit Final Report
-                    </button>
                 </div>
             </div>`;
-    </script>
-    <div id="snapshot-modal" class="hidden fixed inset-0 z-[100] bg-gray-900/90 flex justify-center p-4 backdrop-blur-sm overflow-y-auto">
-        <button onclick="document.getElementById('snapshot-modal').classList.add('hidden')" class="fixed top-2 right-2 text-white bg-black/20 rounded-full p-2 hover:bg-black/40 z-[102] transition-colors">
-            <i data-lucide="x" class="w-6 h-6"></i>
-        </button>
+            const generateReportsContent = () => `
+                <div class="space-y-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500">
+                            <div class="text-xs text-gray-500 font-bold uppercase">Total Sales</div>
+                            <div class="text-xl font-bold text-gray-800 mt-1" id="rep-sales">0.00</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-500">
+                            <div class="text-xs text-gray-500 font-bold uppercase">Total Expenses</div>
+                            <div class="text-xl font-bold text-red-600 mt-1" id="rep-expenses">0.00</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-yellow-500">
+                            <div class="text-xs text-gray-500 font-bold uppercase">Discounts</div>
+                            <div class="text-xl font-bold text-gray-800 mt-1" id="rep-discounts">0.00</div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500">
+                            <div class="text-xs text-gray-500 font-bold uppercase">Cash Count (BUO)</div>
+                            <div class="text-xl font-bold text-green-700 mt-1" id="rep-buo">0.00</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <div class="lg:col-span-1 space-y-6">
+                            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                                <h3 class="font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="edit-3" class="w-4 h-4 mr-2"></i> Daily Inputs</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="text-xs font-bold text-gray-500">BUO (Cash Count)</label>
+                                        <input type="number" id="input-buo1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-bold text-gray-500">MOD (Money Out Declared)</label>
+                                        <input type="number" id="input-mod1" class="w-full border rounded p-2 text-right font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="text-xs font-bold text-gray-500">TIMPLA</label>
+                                            <input type="number" id="input-timpla1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+                                        </div>
+                                        <div>
+                                            <label class="text-xs font-bold text-gray-500">TIRA</label>
+                                            <input type="number" id="input-tira1" class="w-full border rounded p-2 text-center font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+                                        </div>
+                                    </div>
+                                    <button id="update-report-btn" onclick="preCheckUpdateRecord()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow mt-2 transition-all">Update Record</button>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-xl shadow-sm">
+                                <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Cash Flow</h3>
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between border-b border-dashed pb-1"><span>Money In</span><span class="font-mono" id="rep-money-in">0.00</span></div>
+                                    <div class="flex justify-between border-b border-dashed pb-1"><span>Money Out</span><span class="font-mono text-red-500" id="rep-money-out">0.00</span></div>
+                                    <div class="flex justify-between border-b border-dashed pb-1"><span>MOD</span><span class="font-mono" id="rep-mod">0.00</span></div>
+                                    <div class="flex justify-between pt-2"><span class="font-bold">Discrepancy</span><span class="font-bold font-mono text-lg" id="rep-discrepancy">0.00</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="bg-white p-6 rounded-xl shadow-sm h-full flex flex-col">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="font-bold text-gray-800 flex items-center"><i data-lucide="package-search" class="w-4 h-4 mr-2"></i> Inventory Reconciliation</h3>
+                                    <div class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium">Wastage: <span id="rep-ratio" class="font-bold text-red-600">0.00</span></div>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-4 mb-4">
+                                    <div class="bg-orange-50 p-3 rounded-lg text-center"><div class="text-xs text-orange-600 uppercase font-bold">Timpla</div><div class="text-lg font-bold text-orange-900" id="rep-timpla">0</div></div>
+                                    <div class="bg-blue-50 p-3 rounded-lg text-center"><div class="text-xs text-blue-600 uppercase font-bold">Tira</div><div class="text-lg font-bold text-blue-900" id="rep-tira-inv">0</div></div>
+                                </div>
+
+                                <div class="space-y-4 flex-grow">
+                                    <div>
+                                        <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">Inventory Discrepancies</h4>
+                                        <div class="overflow-x-auto border rounded-lg">
+                                            <table class="w-full text-sm text-left table-fixed">
+                                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200">
+                                                    <tr>
+                                                        <th class="px-2 py-2 w-[20%]">Category</th>
+                                                        <th class="px-2 py-2 w-[25%]">Item</th>
+                                                        <th class="px-2 py-2 w-[10%] text-center">Unit</th>
+                                                        <th class="px-2 py-2 w-[15%] text-right">IUQTY</th>
+                                                        <th class="px-2 py-2 w-[15%] text-right">UQTY</th>
+                                                        <th class="px-2 py-2 w-[15%] text-right">OU%</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="table-discrepancies" class="divide-y divide-gray-100"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <h4 class="text-xs font-bold text-blue-500 uppercase mb-2">Added Inventories</h4>
+                                            <div class="overflow-x-auto border rounded-lg max-h-48">
+                                                <table class="w-full text-sm text-left table-fixed">
+                                                    <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
+                                                        <tr>
+                                                            <th class="px-2 py-1 w-[30%]">Category</th>
+                                                            <th class="px-2 py-1 w-[35%]">Item</th>
+                                                            <th class="px-2 py-1 w-[15%] text-center">Unit</th>
+                                                            <th class="px-2 py-1 w-[20%] text-right">Qty</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="table-added" class="divide-y divide-gray-100"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 class="text-xs font-bold text-yellow-600 uppercase mb-2">Requested Inventories</h4>
+                                            <div class="overflow-x-auto border rounded-lg max-h-48">
+                                                <table class="w-full text-sm text-left table-fixed">
+                                                    <thead class="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-200 sticky top-0">
+                                                        <tr>
+                                                            <th class="px-2 py-1 w-[30%]">Category</th>
+                                                            <th class="px-2 py-1 w-[35%]">Item</th>
+                                                            <th class="px-2 py-1 w-[15%] text-center">Unit</th>
+                                                            <th class="px-2 py-1 w-[20%] text-right">Qty</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="table-requested" class="divide-y divide-gray-100"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Payment Methods</h3>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div class="flex justify-between border-b pb-1"><span>Cash</span><span class="font-bold" id="rep-cash">0.00</span></div>
+                                <div class="flex justify-between border-b pb-1"><span>GCash</span><span class="font-bold text-blue-600" id="rep-gcash">0.00</span></div>
+                                <div class="flex justify-between border-b pb-1"><span>BPI</span><span class="font-bold text-red-600" id="rep-bpi">0.00</span></div>
+                                <div class="flex justify-between border-b pb-1"><span>GoTyme</span><span class="font-bold text-cyan-600" id="rep-gotyme">0.00</span></div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm">
+                            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Expenses Today</h3>
+                            <div class="overflow-x-auto max-h-40 border rounded-lg">
+                                <table class="w-full text-sm text-left"><thead class="bg-gray-50 text-xs uppercase sticky top-0"><tr><th class="px-2 py-1">Type</th><th class="px-2 py-1">Item</th><th class="px-2 py-1 text-center">Qty</th><th class="px-2 py-1 text-right">Price</th><th class="px-2 py-1 text-right">Amt</th></tr></thead><tbody id="table-expenses-today" class="divide-y divide-gray-100"></tbody></table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-4 border-t">
+                        <button onclick="viewReportSnapshot()" class="flex items-center px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors shadow-sm">
+                            <i data-lucide="eye" class="w-5 h-5 mr-2"></i> View Snapshot
+                        </button>
+                        <button onclick="confirmSubmitReport()" class="flex items-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105">
+                            <i data-lucide="send" class="w-5 h-5 mr-2"></i> Submit Final Report
+                        </button>
+                    </div>
+                </div>`;
+      </script>
+      <div id="snapshot-modal" class="hidden fixed inset-0 z-[100] bg-gray-900/90 flex justify-center p-4 backdrop-blur-sm overflow-y-auto">
+          <button onclick="document.getElementById('snapshot-modal').classList.add('hidden')" class="fixed top-2 right-2 text-white bg-black/20 rounded-full p-2 hover:bg-black/40 z-[102] transition-colors">
+              <i data-lucide="x" class="w-6 h-6"></i>
+          </button>
 
         <div id="report-snapshot-content" class="bg-gray-100 shadow-2xl rounded-sm w-full max-w-[148mm] min-h-[210mm] relative font-sans text-gray-800 my-auto mx-auto border border-gray-300 flex flex-col">
             
@@ -2191,8 +2507,3 @@
 </body>
 
 </html>
-
-
-
-
-
